@@ -15,7 +15,7 @@ namespace _1brc
             Console.ResetColor();
             try
             {
-                const string FILE_NAME = "../../[data]/1brc_100M.txt"; //"../../[data]/1brc_1B.txt"; //
+                const string FILE_NAME = "../../[data]/1brc_1B.txt"; //"../../[data]/1brc_100M.txt"; //
 
                 var path = args.FirstOrDefault() ?? FILE_NAME;
                 //-------------------------------------------------------//
@@ -51,13 +51,13 @@ namespace _1brc
 
         private static void Print2Console( this IDictionary< ListSegment< byte >, SummaryDouble > map )
         {
-            long count = 0;
+            long count   = 0;
             //var  line  = 0;
             //Console.Write( '{' );
             var query = map;//.Select( x => (Name: x.Key.ToString(), Summary: x.Value) ).OrderBy( x => x.Name, StringComparer.InvariantCulture );
             foreach ( var (Name, Summary) in query )
             {
-                count += Summary.Count;
+                count   += Summary.Count;
                 //Console.WriteLine( $"{Name} = {Summary}" );
                 //if ( ++line < map.Count ) Console.Write( ", " );
             }

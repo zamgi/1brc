@@ -31,6 +31,7 @@ namespace System
             public int GetHashCode( in ListSegment< T > obj ) => obj.GetHashCode();
         }
 
+
         private static EqualityComparer< T > T_EqualityComparer;
         static ListSegment() => T_EqualityComparer = EqualityComparer< T >.Default;
 
@@ -68,9 +69,9 @@ namespace System
         }
 
 
-        //public T[] Array { [M(O.AggressiveInlining)] get => _Array; }
+        public T[] Array  { [M(O.AggressiveInlining)] get => _Array; }
         public int Offset { [M(O.AggressiveInlining)] get => _Offset; }
-        public int Count { [M(O.AggressiveInlining)] get => _Count; }
+        public int Count  { [M(O.AggressiveInlining)] get => _Count; }
 
         public T this[ int index ]
         {
@@ -190,6 +191,18 @@ namespace System
             }
             return (-1);
         }
+        [M(O.AggressiveInlining)] public int IndexOf( T t, int startIndex, IEqualityComparer< T > comp )
+        {
+            var span = this.AsSpan();
+            for ( ; startIndex < _Count; startIndex++ )
+            {
+                if ( comp.Equals( span[ startIndex ], t ) )
+                {
+                    return (startIndex);
+                }
+            }
+            return (-1);
+        }
         [M(O.AggressiveInlining)] public int IndexOf( T t, Func< T, T, bool > comp )
         {
             var span = this.AsSpan();
@@ -263,6 +276,7 @@ namespace System
         IEnumerator< T > IEnumerable< T >.GetEnumerator() => new Enumerator( this );
         IEnumerator IEnumerable.GetEnumerator() => new Enumerator( this );
         #endregion
+
 
         /// <summary>
         /// 

@@ -4,7 +4,10 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.Intrinsics;
 using System.Text;
+
+using _1brc;
 
 using M = System.Runtime.CompilerServices.MethodImplAttribute;
 using O = System.Runtime.CompilerServices.MethodImplOptions;
@@ -33,6 +36,7 @@ namespace System
             var buf       = new byte[ innerBufferCapacity ];
             var remainder = new DirectAccessList< byte >( innerBufferCapacity );
             var tmp       = new DirectAccessList< byte >( innerBufferCapacity );
+            using var newLineSearcher = ByteSearcherHelper.Create_NewLineSearcher( buf );
 #if DEBUG
             var line_num = 0L;
             var read_num = 0L; 
@@ -48,7 +52,8 @@ namespace System
                 var startIndex = 0;
                 if ( 0 < remainder.Count )
                 {
-                    var i = buf.IndexOfNewLine( 0/*startIndex*/, read_cnt, out var skip_char_cnt );
+                    var i = newLineSearcher.IndexOfNewLine( 0/*startIndex*/, read_cnt, out var skip_char_cnt ); 
+                    //---var i = buf.IndexOfNewLine( 0/*startIndex*/, read_cnt, out var skip_char_cnt );
                     if ( i != -1 )
                     {
 #if DEBUG
@@ -67,7 +72,8 @@ namespace System
                 
                 for (; ; )
                 {
-                    var i = buf.IndexOfNewLine( startIndex, read_cnt, out var skip_char_cnt );
+                    var i = newLineSearcher.IndexOfNewLine( startIndex, read_cnt, out var skip_char_cnt );
+                    //---var i = buf.IndexOfNewLine( startIndex, read_cnt, out var skip_char_cnt );
                     if ( i == -1 )
                     {
                         break;
@@ -107,6 +113,7 @@ namespace System
             var buf       = new byte[ innerBufferCapacity ];
             var remainder = new DirectAccessList< byte >( innerBufferCapacity );
             var tmp       = new DirectAccessList< byte >( innerBufferCapacity );
+            using var newLineSearcher = ByteSearcherHelper.Create_NewLineSearcher( buf );
 #if DEBUG
             var line_num = 0;
             var read_num = 0; 
@@ -135,7 +142,8 @@ namespace System
                 var startIndex = 0;
                 if ( 0 < remainder.Count )
                 {
-                    var i = buf.IndexOfNewLine( 0/*startIndex*/, read_cnt, out var skip_char_cnt );
+                    var i = newLineSearcher.IndexOfNewLine( 0/*startIndex*/, read_cnt, out var skip_char_cnt );
+                    //---var i = buf.IndexOfNewLine( 0/*startIndex*/, read_cnt, out var skip_char_cnt );
                     if ( i != -1 )
                     {
 #if DEBUG
@@ -154,7 +162,8 @@ namespace System
                 
                 for (; ; )
                 {
-                    var i = buf.IndexOfNewLine( startIndex, read_cnt, out var skip_char_cnt );
+                    var i = newLineSearcher.IndexOfNewLine( startIndex, read_cnt, out var skip_char_cnt );
+                    //---var i = buf.IndexOfNewLine( startIndex, read_cnt, out var skip_char_cnt );
                     if ( i == -1 )
                     {
                         break;
@@ -219,6 +228,7 @@ namespace System
             var buf       = new byte[ innerBufferCapacity ];
             var remainder = new DirectAccessList< byte >( innerBufferCapacity );
             var tmp       = new DirectAccessList< byte >( innerBufferCapacity );
+            using var newLineSearcher = ByteSearcherHelper.Create_NewLineSearcher( buf );
 #if DEBUG
             var line_num = 0L;
             var read_num = 0L; 
@@ -234,7 +244,8 @@ namespace System
                 var startIndex = 0;
                 if ( 0 < remainder.Count )
                 {
-                    var i = buf.IndexOfNewLine( 0/*startIndex*/, read_cnt, out var skip_char_cnt );
+                    var i = newLineSearcher.IndexOfNewLine( 0/*startIndex*/, read_cnt, out var skip_char_cnt );
+                    //---var i = buf.IndexOfNewLine( 0/*startIndex*/, read_cnt, out var skip_char_cnt );
                     if ( i != -1 )
                     {
 #if DEBUG
@@ -253,7 +264,8 @@ namespace System
                 
                 for (; ; )
                 {
-                    var i = buf.IndexOfNewLine( startIndex, read_cnt, out var skip_char_cnt );
+                    var i = newLineSearcher.IndexOfNewLine( startIndex, read_cnt, out var skip_char_cnt );
+                    //---var i = buf.IndexOfNewLine( startIndex, read_cnt, out var skip_char_cnt );
                     if ( i == -1 )
                     {
                         break;
@@ -293,6 +305,7 @@ namespace System
             var buf       = new byte[ innerBufferCapacity ];
             var remainder = new DirectAccessList< byte >( innerBufferCapacity );
             var tmp       = new DirectAccessList< byte >( innerBufferCapacity );
+            using var newLineSearcher = ByteSearcherHelper.Create_NewLineSearcher( buf );
 #if DEBUG
             var line_num = 0;
             var read_num = 0; 
@@ -321,7 +334,8 @@ namespace System
                 var startIndex = 0;
                 if ( 0 < remainder.Count )
                 {
-                    var i = buf.IndexOfNewLine( 0/*startIndex*/, read_cnt, out var skip_char_cnt );
+                    var i = newLineSearcher.IndexOfNewLine( 0/*startIndex*/, read_cnt, out var skip_char_cnt );
+                    //---var i = buf.IndexOfNewLine( 0/*startIndex*/, read_cnt, out var skip_char_cnt );
                     if ( i != -1 )
                     {
 #if DEBUG
@@ -340,7 +354,8 @@ namespace System
                 
                 for (; ; )
                 {
-                    var i = buf.IndexOfNewLine( startIndex, read_cnt, out var skip_char_cnt );
+                    var i = newLineSearcher.IndexOfNewLine( startIndex, read_cnt, out var skip_char_cnt );
+                    //---var i = buf.IndexOfNewLine( startIndex, read_cnt, out var skip_char_cnt );
                     if ( i == -1 )
                     {
                         break;
@@ -401,6 +416,7 @@ namespace System
             var buf       = new byte[ innerBufferCapacity ];
             var remainder = new DirectAccessList< byte >( innerBufferCapacity );
             var tmp       = new DirectAccessList< byte >( innerBufferCapacity );
+            using var newLineSearcher = ByteSearcherHelper.Create_NewLineSearcher( buf );
 #if DEBUG
             var line_num = 0L;
             var read_num = 0L; 
@@ -416,7 +432,8 @@ namespace System
                 var startIndex = 0;
                 if ( 0 < remainder.Count )
                 {
-                    var i = buf.IndexOfNewLine( 0/*startIndex*/, read_cnt, out var skip_char_cnt );
+                    var i = newLineSearcher.IndexOfNewLine( 0/*startIndex*/, read_cnt, out var skip_char_cnt );
+                    //---var i = buf.IndexOfNewLine( 0/*startIndex*/, read_cnt, out var skip_char_cnt );
                     if ( i != -1 )
                     {
 #if DEBUG
@@ -435,7 +452,8 @@ namespace System
                 
                 for (; ; )
                 {
-                    var i = buf.IndexOfNewLine( startIndex, read_cnt, out var skip_char_cnt );
+                    var i = newLineSearcher.IndexOfNewLine( startIndex, read_cnt, out var skip_char_cnt );
+                    //---var i = buf.IndexOfNewLine( startIndex, read_cnt, out var skip_char_cnt );
                     if ( i == -1 )
                     {
                         break;
@@ -475,6 +493,7 @@ namespace System
             var buf       = new byte[ innerBufferCapacity ];
             var remainder = new DirectAccessList< byte >( innerBufferCapacity );
             var tmp       = new DirectAccessList< byte >( innerBufferCapacity );
+            using var newLineSearcher = ByteSearcherHelper.Create_NewLineSearcher( buf );
 #if DEBUG
             var line_num = 0;
             var read_num = 0; 
@@ -503,7 +522,8 @@ namespace System
                 var startIndex = 0;
                 if ( 0 < remainder.Count )
                 {
-                    var i = buf.IndexOfNewLine( 0/*startIndex*/, read_cnt, out var skip_char_cnt );
+                    var i = newLineSearcher.IndexOfNewLine( 0/*startIndex*/, read_cnt, out var skip_char_cnt );
+                    //---var i = buf.IndexOfNewLine( 0/*startIndex*/, read_cnt, out var skip_char_cnt );
                     if ( i != -1 )
                     {
 #if DEBUG
@@ -522,7 +542,8 @@ namespace System
                 
                 for (; ; )
                 {
-                    var i = buf.IndexOfNewLine( startIndex, read_cnt, out var skip_char_cnt );
+                    var i = newLineSearcher.IndexOfNewLine( startIndex, read_cnt, out var skip_char_cnt );
+                    //---var i = buf.IndexOfNewLine( startIndex, read_cnt, out var skip_char_cnt );
                     if ( i == -1 )
                     {
                         break;
@@ -531,6 +552,7 @@ namespace System
                     line_num++; 
 #endif
                     var seg = new ListSegment< byte >( buf, startIndex, i - startIndex );
+                        //Debug.Assert( new ListSegment< byte >( buf, startIndex, i - startIndex + 1 ).Last() == '\n' );
                     readByLineCallback.Callback( seg );
 
                     startIndex = i + 1 + skip_char_cnt;
@@ -561,6 +583,194 @@ namespace System
             }
         }
 
+
+        public static void ReadByLine( string filePath, IReadByLineCallback readByLineCallback, object readFileLock
+            , byte[] readBuffer, (long startIndex, long length)? section = null )
+        {
+            if ( readByLineCallback == null ) throw (new ArgumentNullException( nameof(readByLineCallback) ));
+            if ( readFileLock       == null ) throw (new ArgumentNullException( nameof(readFileLock) ));
+            if ( readBuffer         == null ) throw (new ArgumentNullException( nameof(readBuffer) ));
+
+            if ( section.HasValue )
+            {
+                ReadByLine_Section( filePath, readByLineCallback, readFileLock, readBuffer, section.Value );
+            }
+            else
+            {
+                ReadByLine_Full( filePath, readByLineCallback, readFileLock, readBuffer );
+            }
+        }
+        private static void ReadByLine_Full( string filePath, IReadByLineCallback readByLineCallback, object readFileLock, byte[] readBuffer )
+        {
+            using var fs = new FileStream( filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 0, FileOptions.SequentialScan );
+
+            var remainder = new DirectAccessList< byte >( readBuffer.Length );
+            var tmp       = new DirectAccessList< byte >( readBuffer.Length );
+            using var newLineSearcher = ByteSearcherHelper.Create_NewLineSearcher( readBuffer );
+#if DEBUG
+            var line_num = 0L;
+            var read_num = 0L; 
+#endif
+            for (; ; )
+            {
+#if DEBUG
+                read_num++; 
+#endif
+                var read_cnt = fs.Read_WithLock( readFileLock, readBuffer );
+                if ( read_cnt <= 0 ) break;
+
+                var startIndex = 0;
+                if ( 0 < remainder.Count )
+                {
+                    var i = newLineSearcher.IndexOfNewLine( 0/*startIndex*/, read_cnt, out var skip_char_cnt );
+                    if ( i != -1 )
+                    {
+#if DEBUG
+                        line_num++; 
+#endif
+                        tmp.AddRange( remainder ); remainder.Clear();
+                        var seg = new ListSegment< byte >( readBuffer, 0/*startIndex*/, i );
+                        tmp.AddRange( seg );
+                        seg = new ListSegment< byte >( tmp );
+                        readByLineCallback.Callback( seg );
+                        tmp.Clear();
+
+                        startIndex = i + 1 + skip_char_cnt;
+                    }
+                }
+                
+                for (; ; )
+                {
+                    var i = newLineSearcher.IndexOfNewLine( startIndex, read_cnt, out var skip_char_cnt );
+                    if ( i == -1 )
+                    {
+                        break;
+                    }
+#if DEBUG
+                    line_num++; 
+#endif
+                    var seg = new ListSegment< byte >( readBuffer, startIndex, i - startIndex );
+                    readByLineCallback.Callback( seg );
+
+                    startIndex = i + 1 + skip_char_cnt;
+                }
+
+                var rem_len = read_cnt - startIndex;
+                if ( 0 < rem_len )
+                {
+                    var seg = new ListSegment< byte >( readBuffer, startIndex, rem_len );
+                    remainder.AddRange( seg );
+                }
+            }
+
+            if ( 0 < remainder.Count )
+            {
+#if DEBUG
+                line_num++; 
+#endif
+                var seg = new ListSegment< byte >( remainder );
+                readByLineCallback.Callback( seg );
+            }
+        }
+        private static void ReadByLine_Section( string filePath, IReadByLineCallback readByLineCallback, object readFileLock, byte[] readBuffer, (long startIndex, long length) section )
+        {
+            using var fs = new FileStream( filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 0, FileOptions.SequentialScan );
+
+            fs.Seek( section.startIndex, SeekOrigin.Begin );
+
+            var remainder = new DirectAccessList< byte >( readBuffer.Length );
+            var tmp       = new DirectAccessList< byte >( readBuffer.Length );
+            using var newLineSearcher = ByteSearcherHelper.Create_NewLineSearcher( readBuffer );
+#if DEBUG
+            var line_num = 0;
+            var read_num = 0; 
+#endif
+            for ( var total_read_cnt = 0L; ; )
+            {
+#if DEBUG
+                read_num++; 
+#endif
+                var read_cnt = fs.Read_WithLock( readFileLock, readBuffer );
+                if ( read_cnt <= 0 ) break;
+
+                #region [.end of section.]
+                total_read_cnt += read_cnt;
+                var d = total_read_cnt - section.length;
+                if ( 0 < d )
+                {
+                    read_cnt -= (int) d;
+                    if ( read_cnt == 0 )
+                    {
+                        break;
+                    }
+                }
+                #endregion
+
+                var startIndex = 0;
+                if ( 0 < remainder.Count )
+                {
+                    var i = newLineSearcher.IndexOfNewLine( 0/*startIndex*/, read_cnt, out var skip_char_cnt );
+                    if ( i != -1 )
+                    {
+#if DEBUG
+                        line_num++; 
+#endif
+                        tmp.AddRange( remainder ); remainder.Clear();
+                        var seg = new ListSegment< byte >( readBuffer, 0/*startIndex*/, i );
+                        tmp.AddRange( seg );
+                        seg = new ListSegment< byte >( tmp );
+                        readByLineCallback.Callback( seg );
+                        tmp.Clear();
+
+                        startIndex = i + 1 + skip_char_cnt;
+                    }
+                }
+                
+                for (; ; )
+                {
+                    var i = newLineSearcher.IndexOfNewLine( startIndex, read_cnt, out var skip_char_cnt );
+                    if ( i == -1 )
+                    {
+                        break;
+                    }
+#if DEBUG
+                    line_num++; 
+#endif
+                    var seg = new ListSegment< byte >( readBuffer, startIndex, i - startIndex );
+                        //Debug.Assert( new ListSegment< byte >( readBuffer, startIndex, i - startIndex + 1 ).Last() == '\n' );
+                    readByLineCallback.Callback( seg );
+
+                    startIndex = i + 1 + skip_char_cnt;
+                }
+
+                var rem_len = read_cnt - startIndex;
+                if ( 0 < rem_len )
+                {
+                    var seg = new ListSegment< byte >( readBuffer, startIndex, rem_len );
+                    remainder.AddRange( seg );
+                }
+
+                #region [.end of section.]
+                if ( 0 < d )
+                {
+                    break;
+                }
+                #endregion
+            }
+
+            if ( 0 < remainder.Count )
+            {
+#if DEBUG
+                line_num++; 
+#endif
+                var seg = new ListSegment< byte >( remainder );
+                readByLineCallback.Callback( seg );
+            }
+        }
+
+
+
+        //--------------------------------------------------------------------------------------------------//
 
         [M(O.AggressiveInlining)] private static int IndexOfNewLine( this IList< byte > buf, int startIndex, out int skip_char_cnt )
         {

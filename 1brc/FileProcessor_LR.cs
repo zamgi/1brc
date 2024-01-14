@@ -5,6 +5,10 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.Linq;
+using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 using System.Threading.Tasks;
 
 using M = System.Runtime.CompilerServices.MethodImplAttribute;
@@ -154,8 +158,11 @@ namespace _1brc
 
                 var suc = DoubleParser.TryParse( val, out var d, out _ ); Debug.Assert( suc );
 
-                ref var summary = ref map.GetValueRefOrAddDefault( name, createNewKeyFunc, out var exists );
-                summary.Apply( d, exists );
+                ref var summary = ref map.GetValueRefOrAddDefault( name, createNewKeyFunc );
+                summary.Apply( d );
+
+                //ref var summary = ref map.GetValueRefOrAddDefault( name, createNewKeyFunc, out var exists );
+                //summary.Apply( d, exists );
             }
 
             return (map);
@@ -165,29 +172,30 @@ namespace _1brc
         /// <summary>
         /// 
         /// </summary>
-        private sealed class ReadByLineCallback : FileByteLineReader.IReadByLineCallback, IEqualityComparer< byte >
+        private sealed class ReadByLineCallback : FileByteLineReader.IReadByLineCallback
         {
-            private Map< ListSegment< byte >, SummaryDouble > _Map;
-            public Map< ListSegment< byte >, SummaryDouble > Map => _Map;
+            private Map< ListSegment< byte >, SummaryDouble > _Map;            
             public ReadByLineCallback( int mapCapacity ) => _Map = new Map< ListSegment< byte >, SummaryDouble >( mapCapacity, ListSegment< byte >.EqualityComparer.Inst );
+
+            public Map< ListSegment< byte >, SummaryDouble > Map => _Map;
+
+            private static Func< ListSegment< byte >, ListSegment< byte > > _CreateNewKeyFunc = new Func< ListSegment< byte >, ListSegment< byte > >( key => new ListSegment< byte >( key.ToArray() ) );
+            private static IByteSearcher _ByteSearcher = ByteSearcherHelper.Create_ByteSearcher( (byte) ';' );
 
             void FileByteLineReader.IReadByLineCallback.Callback( in ListSegment< byte > line_seg )
             {
-                var idx = line_seg.IndexOf( (byte) ';', this/*_is_bytes_equals_func*/ ); Debug.Assert( 0 <= idx );
-
+                var idx  = _ByteSearcher.IndexOf( line_seg ); Debug.Assert( 0 <= idx );
                 var name = line_seg.Slice( 0, idx );
                 var val  = line_seg.Slice( idx + 1 );
 
                 var suc = DoubleParser.TryParse( val, out var d, out _ ); Debug.Assert( suc );
 
-                ref var summary = ref _Map.GetValueRefOrAddDefault( name, _CreateNewKeyFunc, out var exists );
-                summary.Apply( d, exists );
+                ref var summary = ref _Map.GetValueRefOrAddDefault( name, _CreateNewKeyFunc );
+                summary.Apply( d );
+
+                //ref var summary = ref _Map.GetValueRefOrAddDefault( name, _CreateNewKeyFunc, out var exists );
+                //summary.Apply( d, exists );
             }
-
-            private static Func< ListSegment< byte >, ListSegment< byte > > _CreateNewKeyFunc = new Func< ListSegment< byte >, ListSegment< byte > >( key => new ListSegment< byte >( key.ToArray() ) );
-
-            bool IEqualityComparer< byte >.Equals( byte x, byte y ) => x == y;
-            int IEqualityComparer< byte >.GetHashCode( byte obj ) => obj;
         }
 
         public static Map< ListSegment< byte >, SummaryDouble > Process_WithCallback( string filePath, in (long startIndex, int length)? section = null

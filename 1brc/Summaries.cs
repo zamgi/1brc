@@ -1,4 +1,3 @@
-using System;
 using System.Runtime.CompilerServices;
 
 using M = System.Runtime.CompilerServices.MethodImplAttribute;
@@ -17,8 +16,6 @@ namespace _1brc
         private double _Sum;
         private long   _Count;
 
-        //public SummaryDouble( double d ) => Init( d );
-
         public double Average => _Sum / _Count;
         public double Min     => _Min;
         public double Max     => _Max;
@@ -28,32 +25,40 @@ namespace _1brc
         [M(O.AggressiveInlining)] public void Apply( double value, bool existing )
         {
             if ( existing )
-                Apply( value );
+            {
+                if ( value < _Min ) _Min = value; // _Min = Math.Min( _Min, value );
+                if ( _Max < value ) _Max = value; // _Max = Math.Max( _Max, value );
+                _Sum += value;
+                _Count++;
+            }
             else
-                Init( value );
+            {
+                _Min   = value;
+                _Max   = value;
+                _Sum   = value;
+                _Count = 1;
+            }
         }
-        [M(O.AggressiveInlining)] public void Init( double value )
-        {
-            _Min = value;
-            _Max = value;
-            _Sum = value;
-            _Count = 1;
-        }
-
         [M(O.AggressiveInlining)] public void Apply( double value )
         {
-            _Min = Math.Min( _Min, value );
-            _Max = Math.Max( _Max, value );
-            _Sum += value;
-            _Count++;
+            if ( _Count++ > 0 )
+            {
+                if ( value < _Min ) _Min = value; // _Min = Math.Min( _Min, value );
+                if ( _Max < value ) _Max = value; // _Max = Math.Max( _Max, value );
+                _Sum += value;
+            }
+            else
+            {
+                _Min = value;
+                _Max = value;
+                _Sum = value;
+            }
         }
 
         [M(O.AggressiveInlining)] public void Merge( in SummaryDouble other )
         {
-            if ( other._Min < _Min )
-                _Min = other._Min;
-            if ( other._Max > _Max )
-                _Max = other._Max;
+            if ( other._Min < _Min ) _Min = other._Min;
+            if ( _Max < other._Max ) _Max = other._Max;
             _Sum   += other._Sum;
             _Count += other._Count;
         }

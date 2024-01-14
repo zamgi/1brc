@@ -954,6 +954,57 @@ namespace System.Collections.Generic
             return ref _Entries[ index ].Value;
             #endregion
         }
+        public ref T GetValueRefOrAddDefault( in K key, Func< K, K > getNewKeyFunc )
+        {
+            #region [.try find exists.]
+            var hash   = InternalGetHashCode( key );
+            var bucket = hash % _Buckets.Length;
+            for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
+            {
+                ref var slot = ref _Entries[ i ];
+                //if ( (slot.HashCode == hash) && !_Comparer.Equals( slot.Key, key ) )
+                //{
+                //    Console.WriteLine( "XZ" );
+                //}
+                if ( (slot.HashCode == hash) && _Comparer.Equals( slot.Key, key ) )
+                {
+                    return ref slot.Value;
+                }
+                i = slot.Next;
+            }
+            #endregion
+
+            #region [.add new.]
+            int index;
+            if ( 0 <= _FreeList )
+            {
+                index = _FreeList;
+                ref readonly var slot = ref _Entries[ index ];
+                _FreeList = slot.Next;
+            }
+            else
+            {
+                if ( _Count == _Entries.Length )
+                {
+                    Resize();
+                    bucket = hash % _Buckets.Length;
+                }
+                index = _Count;
+                _Count++;
+            }
+
+            _Entries[ index ] = new Entry() 
+            {
+                HashCode = hash,
+                Value    = default,
+                Key      = getNewKeyFunc( key ),
+                Next     = _Buckets[ bucket ],
+            };
+            _Buckets[ bucket ] = index;
+
+            return ref _Entries[ index ].Value;
+            #endregion
+        }
 
         private void CopyTo( KeyValuePair< K, T >[] array, int index )
         {
