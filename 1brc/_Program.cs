@@ -15,7 +15,7 @@ namespace _1brc
             Console.ResetColor();
             try
             {
-                const string FILE_NAME = "E:/1brc/1brc_100M.txt"; //"E:/1brc/1brc_1B.txt"; //
+                const string FILE_NAME = "../../[data]/1brc_100M.txt"; //"../../[data]/1brc_1B.txt"; //
 
                 var path = args.FirstOrDefault() ?? FILE_NAME;
                 //-------------------------------------------------------//
