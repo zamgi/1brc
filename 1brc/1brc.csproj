@@ -25,4 +25,8 @@
     <!-- <RetainVMGarbageCollection>true</RetainVMGarbageCollection> -->
     <ProduceReferenceAssembly>False</ProduceReferenceAssembly>
   </PropertyGroup>
+
+  <PropertyGroup>
+    <DefineConstants>$(DefineConstants);CALC_SUM2</DefineConstants>
+  </PropertyGroup>
 </Project>

@@ -5,10 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.Linq;
-using System.Numerics;
-using System.Runtime.CompilerServices;
-using System.Runtime.Intrinsics;
-using System.Runtime.Intrinsics.X86;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
 using M = System.Runtime.CompilerServices.MethodImplAttribute;
@@ -23,12 +20,12 @@ namespace _1brc
     {
         private const int MAX_CHUNK_SIZE = int.MaxValue - 100_000;
 
-        private static List< (long start, int length) > SplitIntoMemoryChunks( string filePath, int? initChunkCount )
+        private static List< (long start, int length) > Split2Chunks( string filePath, int? initChunkCount )
         {
-            using var fs = new FileStream( filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 0, FileOptions.SequentialScan );
-            var fileLength = fs.Length;
+            using var fileHandle = File.OpenHandle( filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, FileOptions.SequentialScan, 0 );
+            var fileLength = RandomAccess.GetLength( fileHandle );
 
-            using var mmf = MemoryMappedFile.CreateFromFile( fs, null, fileLength, MemoryMappedFileAccess.Read, HandleInheritability.None, true );
+            using var mmf = MemoryMappedFile.CreateFromFile( fileHandle, null, fileLength, MemoryMappedFileAccess.Read, HandleInheritability.None, true );
             
             using var mmva = mmf.CreateViewAccessor( 0, fileLength, MemoryMappedFileAccess.Read );
             using var mmvh = mmva.SafeMemoryMappedViewHandle;
@@ -87,13 +84,14 @@ namespace _1brc
             return (idx);
         }
 
+
         public static Map< ListSegment< byte >, SummaryDouble > Process( string filePath, int? chunkCount = null
             , int innerBufferCapacity = 1 << 20
             , int mapCapacity = 1_000 )
         {
             //1
-            var sw = Stopwatch.StartNew(); Console.Write( "(begin SplitIntoMemoryChunks..." );
-            var ts = SplitIntoMemoryChunks( filePath, chunkCount ); sw.Stop();
+            var sw = Stopwatch.StartNew(); Console.Write( "(begin Split2Chunks..." );
+            var ts = Split2Chunks( filePath, chunkCount ); sw.Stop();
             Console.WriteLine( $"end, elapsed: {sw.Elapsed})" );
 
             //2
@@ -112,6 +110,53 @@ namespace _1brc
 #endif
                 {
                     var map = FileSectionProcessor_LR.Process_WithCallback( filePath, readFileLock: ts, t, innerBufferCapacity, mapCapacity );
+                    bag.Add( map );
+#if DEBUG
+                    Console.WriteLine( $"{i + 1} of {ts.Count}" );
+#endif
+                });
+
+            var res_map = bag.Aggregate( (map, chunk) =>
+            {
+                foreach ( var p in chunk )
+                {
+                    ref var summary = ref map.GetValueRefOrAddDefault( p.Key, out bool exists );
+                    if ( exists )
+                        summary.Merge( p.Value );
+                    else
+                        summary = p.Value;
+                }
+
+                return (map);
+            });
+            return (res_map);
+        }
+
+        public static Map< ListSegment< byte >, SummaryDouble > Process_v2( string filePath, int? chunkCount = null
+            , int innerBufferCapacity = 1 << 20
+            , int mapCapacity = 1_000 )
+        {
+            //1
+            var sw = Stopwatch.StartNew(); Console.Write( "(begin Split2Chunks..." );
+            var ts = Split2Chunks( filePath, chunkCount ); sw.Stop();
+            Console.WriteLine( $"end, elapsed: {sw.Elapsed})" );
+
+            //2
+            var po = new ParallelOptions();
+#if DEBUG
+            po.MaxDegreeOfParallelism = 1; //ts.Count; //
+#else
+            po.MaxDegreeOfParallelism = ts.Count;
+#endif
+            var bag = new ConcurrentBag< Map< ListSegment< byte >, SummaryDouble > >();
+            Parallel.ForEach( ts, po,
+#if DEBUG
+                (t, _, i) =>
+#else
+                t =>
+#endif
+                {
+                    var map = FileSectionProcessor_LR.Process_WithCallback_v2( filePath, readFileLock: ts, t, innerBufferCapacity, mapCapacity );
                     bag.Add( map );
 #if DEBUG
                     Console.WriteLine( $"{i + 1} of {ts.Count}" );
@@ -217,6 +262,69 @@ namespace _1brc
             FileByteLineReader.ReadByLine( filePath, rblc, readFileLock, section, innerBufferCapacity );
 
             return (rblc.Map);
+        }
+
+
+        /// <summary>
+        /// 
+        /// </summary>
+        private sealed class ReadBufferCallback : FileByteBufferReader.IReadBufferCallback, IDisposable
+        {
+            private Map< ListSegment< byte >, SummaryDouble > _Map;
+            private byte[]   _ReadBuffer;
+            private GCHandle _ReadBuffer_GCHandle;
+            private byte*    _ReadBuffer_BasePtr;
+            private IByteSearcher_v2 _ByteSearcher;
+            public ReadBufferCallback( int mapCapacity, byte[] readBuffer )
+            {
+                _Map = new Map< ListSegment< byte >, SummaryDouble >( mapCapacity, ListSegment< byte >.EqualityComparer.Inst );
+
+                _ReadBuffer          = readBuffer;
+                _ReadBuffer_GCHandle = GCHandle.Alloc( readBuffer, GCHandleType.Pinned );
+                _ReadBuffer_BasePtr  = (byte*) _ReadBuffer_GCHandle.AddrOfPinnedObject().ToPointer();
+
+                _ByteSearcher = ByteSearcherHelper.Create_ByteSearcher_v2( (byte) ';', _ReadBuffer_BasePtr );
+            }
+            public void Dispose()
+            {
+                _ReadBuffer_GCHandle.Free();
+                _ByteSearcher.Dispose();
+            }
+
+            public Map< ListSegment< byte >, SummaryDouble > Map => _Map;
+
+            private static Func< ListSegment< byte >, ListSegment< byte > > _CreateNewKeyFunc = new Func< ListSegment< byte >, ListSegment< byte > >( key => new ListSegment< byte >( key.ToArray() ) );
+
+            void FileByteBufferReader.IReadBufferCallback.Callback( int readByteCount )
+            {
+                var span = new Span< byte >( _ReadBuffer_BasePtr, readByteCount );
+                for ( var startIdx = 0; startIdx < readByteCount; )
+                {
+                    var idx  = _ByteSearcher.IndexOf( startIdx, readByteCount ); Debug.Assert( 0 <= idx );
+                    var name = new ListSegment< byte >( _ReadBuffer, startIdx, idx ); //span.Slice( startIdx, idx - startIdx );
+                    idx++;
+                    var val = span.Slice( startIdx + idx, readByteCount - (startIdx + idx) ); //new ListSegment< byte >( _ReadBuffer, startIdx + idx, readByteCount - (startIdx + idx) );
+
+                    var suc = DoubleParser.TryParse_ByNewLine( val, out var d, out var endPos ); Debug.Assert( suc );
+
+                    ref var summary = ref _Map.GetValueRefOrAddDefault( name, _CreateNewKeyFunc );
+                    summary.Apply( d );
+
+                    startIdx += idx + endPos + 1;
+                }
+            }
+        }
+
+        public static Map< ListSegment< byte >, SummaryDouble > Process_WithCallback_v2( string filePath, object readFileLock, in (long startIndex, int length)? section = null
+            , int innerBufferCapacity = 1 << 20
+            , int mapCapacity = 1_000 )
+        {
+            var readBuffer = new byte[ innerBufferCapacity ];
+            using var rbc = new ReadBufferCallback( mapCapacity, readBuffer );
+
+            FileByteBufferReader.Read( filePath, rbc, readFileLock, readBuffer, section );
+
+            return (rbc.Map);
         }
     }
 }

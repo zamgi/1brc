@@ -279,6 +279,74 @@ namespace System
                     return (false);
             }
         }
+        [M(O.AggressiveInlining)] public static bool TryParse_ByNewLine( in Span< byte > span, out double d, out int finitaPos )
+        {
+            var sign    = 1;
+            var integer = 0L;
+            var fract_order = 0;
+
+            var pos = 0;
+            var ct  = CharType.__UNDEFINED__;
+            
+            var end = span.Length  -1;
+            var prev_ct = CharType.__UNDEFINED__;
+            for ( var next_state = StateType.__UNDEFINED__; pos <= end; pos++ )
+            {
+                var ch = (char) span[ pos ];
+                    ct = ch.GetCharType();
+
+                var states = _TransMap[ (int) ct ];                
+                var __next_state__ = states[ (int) next_state ];
+                if ( __next_state__ == StateType.Fail )
+                {
+                    switch ( ch )
+                    {
+                        case '\r': 
+                            if ( (pos != end) && (span[ pos + 1 ] == '\n') )
+                            {
+                                pos++;
+                            }
+                            ct = prev_ct;
+                            goto EXIT;
+
+                        case '\n':
+                            ct = prev_ct;
+                            goto EXIT;
+
+                        default:
+                            d = default;
+                            finitaPos = pos;
+                            return (false);
+                    }                    
+                }
+                next_state = __next_state__;
+
+                switch ( ct )
+                {
+                    case CharType.Number:
+                        integer = integer * 10 + (ch - '0');
+                        fract_order *= 10;
+                        break;
+                    case CharType.Minus: sign = -1; break;
+                    case CharType.Dot  : fract_order = 1; break;
+                }
+
+                prev_ct = ct;
+            }
+        EXIT:
+            finitaPos = pos;
+
+            switch ( ct )
+            {
+                case CharType.Number:
+                    d = sign * integer / ((0 < fract_order) ? (double) fract_order : 1);
+                    return (true);
+
+                default:
+                    d = default;
+                    return (false);
+            }
+        }
     }
 
     /// <summary>

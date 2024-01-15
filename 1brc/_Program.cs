@@ -31,7 +31,7 @@ namespace _1brc
                 //var innerBufferCapacity = 4096 * 10_000; //39MB
                 var innerBufferCapacity = 4096 * 1_000; //3.9MB
                 sw.Restart();
-                var map = FileProcessor_LR.Process( path, chunkCount: Environment.ProcessorCount, innerBufferCapacity );
+                var map = FileProcessor_LR.Process_v2( path, chunkCount: Environment.ProcessorCount, innerBufferCapacity );
                 sw.Stop();
 
                 map.Print2Console();
@@ -51,20 +51,30 @@ namespace _1brc
 
         private static void Print2Console( this IDictionary< ListSegment< byte >, SummaryDouble > map )
         {
-            long count   = 0;
+            long   count = 0;
+#if (DEBUG || CALC_SUM2)
+            long   sum2  = 0;
+#endif
             //var  line  = 0;
             //Console.Write( '{' );
             var query = map;//.Select( x => (Name: x.Key.ToString(), Summary: x.Value) ).OrderBy( x => x.Name, StringComparer.InvariantCulture );
             foreach ( var (Name, Summary) in query )
             {
-                count   += Summary.Count;
+                count += Summary.Count;
+#if (DEBUG || CALC_SUM2)
+                sum2 += Summary.Sum2;
+#endif
                 //Console.WriteLine( $"{Name} = {Summary}" );
                 //if ( ++line < map.Count ) Console.Write( ", " );
             }
 
             //Console.WriteLine( '}' );
             //Console.WriteLine();
-            Console.WriteLine( $"Total row count: {count:#,#}" );
+            Console.WriteLine( $"Total row count: {count:#,#}"
+#if (DEBUG || CALC_SUM2)
+                + $", (avg={1.0 * sum2 / count})"
+#endif
+                );
         }
     }
 }
