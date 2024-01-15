@@ -61,7 +61,9 @@ namespace System
         }
         [M(O.AggressiveInlining)] public ListSegment( T[] array, int offset, int count )
         {            
-            if ( array == null || (uint) offset > (uint) array.Length || (uint) count > (uint) (array.Length - offset) ) throw (new ArgumentException());
+            if ( array == null ) throw (new ArgumentException( "array == null" ));
+            if ( (uint) offset > (uint) array.Length ) throw (new ArgumentException( $"[(uint) offset > (uint) array.Length], offset={(uint) offset}, array.Length={(uint) array.Length}" ));
+            if ( (uint) count > (uint) (array.Length - offset) ) throw (new ArgumentException( $"[(uint) count > (uint) (array.Length - offset)], count={count}, array.Length={array.Length}, offset={offset}, (uint)(array.Length - offset)={(uint) (array.Length - offset)}" ));
 
             _Array  = array;
             _Offset = offset;

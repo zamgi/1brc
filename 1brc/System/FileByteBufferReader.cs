@@ -1,6 +1,8 @@
 ﻿using System.Diagnostics;
 using System.IO;
 
+using static System.Collections.Specialized.BitVector32;
+
 using M = System.Runtime.CompilerServices.MethodImplAttribute;
 using O = System.Runtime.CompilerServices.MethodImplOptions;
 
@@ -35,7 +37,10 @@ namespace System
         }
         private static void Read_Full( string filePath, IReadBufferCallback readBufferCallback, object readFileLock, byte[] readBuffer )
         {
-            using var fs = new FileStream( filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 0, FileOptions.SequentialScan );
+            using var fileHandle = File.OpenHandle( filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, FileOptions.SequentialScan, 0 );
+
+            var fileOffset     = 0L;
+            var readBufferSpan = readBuffer.AsSpan();
 #if DEBUG
             var read_num       = 0;
             var total_read_cnt = 0L;
@@ -45,55 +50,22 @@ namespace System
 #if DEBUG
                 read_num++;
 #endif
-                var read_cnt = fs.Read_WithLock( readFileLock, readBuffer );
+                var read_cnt = RandomAccess.Read( fileHandle, readBufferSpan, fileOffset );
                 if ( read_cnt <= 0 ) break;
+                fileOffset += read_cnt;
 #if DEBUG
                 total_read_cnt += read_cnt;
 #endif
-                readBufferCallback.Callback( read_cnt );
-            }
-        }
-        private static void Read_Section__PREV( string filePath, IReadBufferCallback readBufferCallback, object readFileLock, byte[] readBuffer, in (long startIndex, long length) section )
-        {
-            using var fs = new FileStream( filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 0, FileOptions.SequentialScan );
-
-            fs.Seek( section.startIndex, SeekOrigin.Begin );
-            var section_length = section.length;
-#if DEBUG
-            var read_num = 0;
-#endif
-            for ( var total_read_cnt = 0L; ; )
-            {
-#if DEBUG
-                read_num++; 
-#endif
-                var read_cnt = fs.Read_WithLock( readFileLock, readBuffer );
-                if ( read_cnt <= 0 ) break;                
-
-                #region [.end of section.]
-                total_read_cnt += read_cnt;
-                var d = total_read_cnt - section_length;
-                if ( 0 < d )
+                var idx = readBuffer.LastIndexOfNewLine( read_cnt ); Debug.Assert( 0 <= idx );
+                var rem_len = read_cnt - (idx + 1);
+                if ( 0 < rem_len )
                 {
-                    read_cnt -= (int) d;
-                    if ( 0 < read_cnt )
-                    {
-                        readBufferCallback.Callback( read_cnt );
-                    }
-                    break;
+                    fileOffset -= rem_len;
+#if DEBUG
+                    total_read_cnt -= rem_len;
+#endif
                 }
-                else
-                {
-                    var idx = readBuffer.LastIndexOfNewLine( read_cnt ); Debug.Assert( 0 <= idx );
-                    var rem_len = read_cnt - (idx + 1);
-                    if ( 0 < rem_len )
-                    {
-                        fs.Position    -= rem_len; 
-                        total_read_cnt -= rem_len;
-                    }
-                    readBufferCallback.Callback( idx /*read_cnt*/ );
-                }
-                #endregion
+                readBufferCallback.Callback( idx /*read_cnt*/ );
             }
         }
         private static void Read_Section( string filePath, IReadBufferCallback readBufferCallback, object readFileLock, byte[] readBuffer, in (long startIndex, long length) section )

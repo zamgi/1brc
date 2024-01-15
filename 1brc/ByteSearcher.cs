@@ -39,9 +39,8 @@ namespace _1brc
     /// </summary>
     unsafe internal static class ByteSearcherHelper
     {
-        public static IByteSearcher Create_ByteSearcher( byte searchByte ) => Vector256.IsHardwareAccelerated ? new ByteSearcher_With_Intrinsics( searchByte ) : new ByteSearcher( searchByte );
-        //public static IByteSearcher Create_ByteSearcher( byte searchByte, byte[] readBuffer ) => Vector256.IsHardwareAccelerated ? new ByteSearcher_With_Intrinsics_v0( searchByte, readBuffer ) : new ByteSearcher( searchByte );
-        public static IByteSearcher_v2 Create_ByteSearcher_v2( byte searchByte, byte* readBufferPtr ) => Vector256.IsHardwareAccelerated ? new ByteSearcher_With_Intrinsics_v2( searchByte, readBufferPtr ) : new ByteSearcher_v2( searchByte, readBufferPtr );
+        public static IByteSearcher Create_ByteSearcher( byte searchByte ) => Vector128/*Vector256*/.IsHardwareAccelerated ? new ByteSearcher_With_Intrinsics( searchByte ) : new ByteSearcher( searchByte );
+        public static IByteSearcher_v2 Create_ByteSearcher_v2( byte searchByte, byte* readBufferPtr ) => Vector128/*Vector256*/.IsHardwareAccelerated ? new ByteSearcher_With_Intrinsics_v2( searchByte, readBufferPtr ) : new ByteSearcher_v2( searchByte, readBufferPtr );
         public static INewLineSearcher Create_NewLineSearcher( byte[] buf ) => Vector256.IsHardwareAccelerated ? new NewLineSearcher_With_Intrinsics( buf ) : new NewLineSearcher( buf );
     }
 
@@ -187,126 +186,6 @@ namespace _1brc
     /// <summary>
     /// 
     /// </summary>
-    unsafe internal class ByteSearcher_With_Intrinsics_v0 : ByteSearcher_Base
-    {
-        protected const int VECTOR256_SIZE_IN_BYTES = 32; // (Vector256< byte >.Count >> 3);
-        protected const int VECTOR128_SIZE_IN_BYTES = 16; // (Vector128< byte >.Count >> 3);
-        protected const int VECTOR64_SIZE_IN_BYTES  = 8;  // (Vector64< byte >.Count >> 3);
-
-        protected Vector256< byte > _SearchByte_Vector256;
-        protected Vector128< byte > _SearchByte_Vector128;
-        protected Vector64 < byte > _SearchByte_Vector64;
-        protected byte _SearchByte;
-
-        private byte[]   _Buf;
-        private GCHandle _Buf_GCHandle;
-        private byte*    _Buf_BasePtr;
-
-        public ByteSearcher_With_Intrinsics_v0( byte searchByte, byte[] readBuffer )
-        {
-            Debug.Assert( Vector256.IsHardwareAccelerated );
-
-            _SearchByte = searchByte;
-            _SearchByte_Vector256 = Vector256.Create( searchByte );
-            _SearchByte_Vector128 = Vector128.Create( searchByte );
-            _SearchByte_Vector64  = Vector64.Create( searchByte );
-
-            _Buf          = readBuffer;
-            _Buf_GCHandle = GCHandle.Alloc( readBuffer, GCHandleType.Pinned );
-            _Buf_BasePtr  = (byte*) _Buf_GCHandle.AddrOfPinnedObject().ToPointer();
-        }
-        ~ByteSearcher_With_Intrinsics_v0() => _Buf_GCHandle.Free();
-        public override void Dispose()
-        {
-            GC.SuppressFinalize( this );
-            _Buf_GCHandle.Free();
-        }
-
-        public override int IndexOf( in ListSegment< byte > line_seg )
-        {
-            Debug.Assert( line_seg.Array == _Buf );
-
-            int idx;
-            var start_idx = 0;
-            var len       = line_seg.Count;
-            /*
-            if ( VECTOR256_SIZE_IN_BYTES <= len )
-            {
-                for ( var ptr = _Buf_BasePtr + line_seg.Offset; ; )
-                {
-                    var next_start = start_idx + VECTOR256_SIZE_IN_BYTES;
-                    if ( len < next_start )
-                    {
-                        break;
-                    }
-
-                    var matches = Vector256.Equals( Unsafe.ReadUnaligned< Vector256< byte > >( ptr + start_idx ), _SearchByte_Vector256 );
-                    var mask    = (uint) Avx2.MoveMask( matches );
-                    if ( mask != 0 )
-                    {
-                        var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
-                        idx = (int) (start_idx + tzcnt);
-                        return (idx);
-                    }
-
-                    start_idx = next_start;
-                }
-            }
-            else 
-            //*/
-            if ( VECTOR128_SIZE_IN_BYTES <= len )
-            {
-                for ( var ptr = _Buf_BasePtr + line_seg.Offset; ; )
-                {
-                    var next_start = start_idx + VECTOR128_SIZE_IN_BYTES;
-                    if ( len < next_start )
-                    {
-                        break;
-                    }
-
-                    var matches = Vector128.Equals( Unsafe.ReadUnaligned< Vector128< byte > >( ptr + start_idx ), _SearchByte_Vector128 );
-                    var mask = (uint) Sse2.MoveMask( matches );
-                    if ( mask != 0 )
-                    {
-                        var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
-                        idx = (int) (start_idx + tzcnt);
-                        return (idx);
-                    }
-
-                    start_idx = next_start;
-                }
-            }
-            else if ( VECTOR64_SIZE_IN_BYTES <= len )
-            {
-                for ( var ptr = _Buf_BasePtr + line_seg.Offset; ; )
-                {
-                    var next_start_idx = start_idx + VECTOR64_SIZE_IN_BYTES;
-                    if ( len < next_start_idx )
-                    {
-                        break;
-                    }
-
-                    var matches = Vector64.Equals( Unsafe.ReadUnaligned< Vector64< byte > >( ptr + start_idx ), _SearchByte_Vector64 );
-                    var mask = (uint) Sse2.MoveMask( Vector64.ToVector128( matches ) );
-                    if ( mask != 0 )
-                    {
-                        var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
-                        idx = (int) (start_idx + tzcnt);
-                        return (idx);
-                    }
-
-                    start_idx = next_start_idx;
-                }
-            }
-
-            idx = line_seg.IndexOf( _SearchByte, start_idx, this ); Debug.Assert( 0 <= idx );
-            return (idx);
-        }
-    }
-
-    /// <summary>
-    /// 
-    /// </summary>
     unsafe internal sealed class ByteSearcher_With_Intrinsics_v2 : IByteSearcher_v2
     {
         private const int VECTOR256_SIZE_IN_BYTES = 32; // (Vector256< byte >.Count >> 3);
@@ -411,22 +290,7 @@ namespace _1brc
             }
 
             idx = _ByteSearcher_v2.IndexOf( startIndex + start_idx, totalLength ); Debug.Assert( 0 <= idx );
-            //---idx = IndexOf( ptr, start_idx, totalLength, _SearchByte ); Debug.Assert( 0 <= idx );
             return (idx);
-        }
-
-        [M(O.AggressiveInlining)] private static int IndexOf( byte* base_ptr, int startIndex, int len, byte searchByte )
-        {
-            for ( byte* ptr = base_ptr + startIndex, end_ptr = base_ptr + len; ptr < end_ptr; ptr++/*, startIndex++*/ )
-            {
-                if ( *ptr == searchByte )
-                {
-                    var idx = (int) (ptr - base_ptr);
-                    return (idx);
-                    //return (startIndex);
-                }
-            }
-            return (-1);
         }
     }
 
@@ -588,7 +452,7 @@ namespace _1brc
             {
                 if ( *ptr == _SearchByte )
                 {
-                    var idx = (int) (ptr - _Buf_BasePtr);
+                    var idx = (int) (ptr - _Buf_BasePtr) - startIndex;
                     return (idx);
                     //return (startIndex);
                 }

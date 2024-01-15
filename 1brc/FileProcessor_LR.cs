@@ -225,11 +225,17 @@ namespace _1brc
             public Map< ListSegment< byte >, SummaryDouble > Map => _Map;
 
             private static Func< ListSegment< byte >, ListSegment< byte > > _CreateNewKeyFunc = new Func< ListSegment< byte >, ListSegment< byte > >( key => new ListSegment< byte >( key.ToArray() ) );
-            private static IByteSearcher _ByteSearcher = ByteSearcherHelper.Create_ByteSearcher( (byte) ';' );
+            private static IByteSearcher _ByteSearcher   = ByteSearcherHelper.Create_ByteSearcher( (byte) ';' );
+#if DEBUG
+            private static IByteSearcher _ByteSearcher_2 = new ByteSearcher( (byte) ';' );
+#endif
 
             void FileByteLineReader.IReadByLineCallback.Callback( in ListSegment< byte > line_seg )
             {
-                var idx  = _ByteSearcher.IndexOf( line_seg ); Debug.Assert( 0 <= idx );
+                var idx   = _ByteSearcher.IndexOf( line_seg ); Debug.Assert( 0 <= idx );
+#if DEBUG
+                var idx_2 = _ByteSearcher_2.IndexOf( line_seg ); Debug.Assert( idx == idx_2 );
+#endif                
                 var name = line_seg.Slice( 0, idx );
                 var val  = line_seg.Slice( idx + 1 );
 
@@ -237,9 +243,6 @@ namespace _1brc
 
                 ref var summary = ref _Map.GetValueRefOrAddDefault( name, _CreateNewKeyFunc );
                 summary.Apply( d );
-
-                //ref var summary = ref _Map.GetValueRefOrAddDefault( name, _CreateNewKeyFunc, out var exists );
-                //summary.Apply( d, exists );
             }
         }
 
@@ -275,6 +278,9 @@ namespace _1brc
             private GCHandle _ReadBuffer_GCHandle;
             private byte*    _ReadBuffer_BasePtr;
             private IByteSearcher_v2 _ByteSearcher;
+#if DEBUG
+            private IByteSearcher_v2 _ByteSearcher_2; 
+#endif
             public ReadBufferCallback( int mapCapacity, byte[] readBuffer )
             {
                 _Map = new Map< ListSegment< byte >, SummaryDouble >( mapCapacity, ListSegment< byte >.EqualityComparer.Inst );
@@ -284,6 +290,9 @@ namespace _1brc
                 _ReadBuffer_BasePtr  = (byte*) _ReadBuffer_GCHandle.AddrOfPinnedObject().ToPointer();
 
                 _ByteSearcher = ByteSearcherHelper.Create_ByteSearcher_v2( (byte) ';', _ReadBuffer_BasePtr );
+#if DEBUG
+                _ByteSearcher_2 = new ByteSearcher_v2( (byte) ';', _ReadBuffer_BasePtr );
+#endif
             }
             public void Dispose()
             {
@@ -300,7 +309,14 @@ namespace _1brc
                 var span = new Span< byte >( _ReadBuffer_BasePtr, readByteCount );
                 for ( var startIdx = 0; startIdx < readByteCount; )
                 {
-                    var idx  = _ByteSearcher.IndexOf( startIdx, readByteCount ); Debug.Assert( 0 <= idx );
+                    //if ( startIdx == 4095994 )
+                    //{
+                    //    if ( Debugger.IsAttached ) Debugger.Break();
+                    //}
+                    var idx   = _ByteSearcher.IndexOf( startIdx, readByteCount ); Debug.Assert( 0 <= idx );
+#if DEBUG
+                    var idx_2 = _ByteSearcher_2.IndexOf( startIdx, readByteCount ); Debug.Assert( idx == idx_2 );
+#endif
                     var name = new ListSegment< byte >( _ReadBuffer, startIdx, idx ); //span.Slice( startIdx, idx - startIdx );
                     idx++;
                     var val = span.Slice( startIdx + idx, readByteCount - (startIdx + idx) ); //new ListSegment< byte >( _ReadBuffer, startIdx + idx, readByteCount - (startIdx + idx) );
