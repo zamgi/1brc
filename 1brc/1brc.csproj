@@ -29,4 +29,10 @@
   <PropertyGroup>
     <DefineConstants>$(DefineConstants);CALC_SUM2</DefineConstants>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="_aot\**" />
+    <EmbeddedResource Remove="_aot\**" />
+    <None Remove="_aot\**" />
+  </ItemGroup>
 </Project>
