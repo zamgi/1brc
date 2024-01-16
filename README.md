@@ -13,6 +13,6 @@ first start on cold-started phicical machine (with empty disk cache):
 
 next starts on same phicical machine (with non-empty disk cache):
 - Total row count: 1 000 000 000
-- Total elapsed: 00:00:05.1365403
+- Total elapsed: 00:00:04.0290019
 
 util for reset/clear disk cache on Windows (for getting a truly true measurement of time): https://github.com/zamgi/ReleaseStandbyMemoryPages

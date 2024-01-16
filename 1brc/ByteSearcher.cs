@@ -15,6 +15,16 @@ namespace _1brc
     /// <summary>
     /// 
     /// </summary>
+    internal static class _vc
+    {
+        public const int VECTOR256_SIZE_IN_BYTES = 32; // (Vector256< byte >.Count >> 3);
+        public const int VECTOR128_SIZE_IN_BYTES = 16; // (Vector128< byte >.Count >> 3);
+        public const int VECTOR64_SIZE_IN_BYTES  = 8;  // (Vector64< byte >.Count >> 3);
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
     internal interface IByteSearcher : IDisposable
     {
         int IndexOf( in ListSegment< byte > line_seg );
@@ -31,7 +41,7 @@ namespace _1brc
     /// </summary>
     internal interface INewLineSearcher : IDisposable
     {
-        int IndexOfNewLine( /*byte[] buf,*/ int startIndex, int length, out int skip_char_cnt );
+        int IndexOfNewLine( int startIndex, int length, out int skip_char_cnt );
     }
 
     /// <summary>
@@ -39,9 +49,13 @@ namespace _1brc
     /// </summary>
     unsafe internal static class ByteSearcherHelper
     {
-        public static IByteSearcher Create_ByteSearcher( byte searchByte ) => Vector128/*Vector256*/.IsHardwareAccelerated ? new ByteSearcher_With_Intrinsics( searchByte ) : new ByteSearcher( searchByte );
-        public static IByteSearcher_v2 Create_ByteSearcher_v2( byte searchByte, byte* readBufferPtr ) => Vector128/*Vector256*/.IsHardwareAccelerated ? new ByteSearcher_With_Intrinsics_v2( searchByte, readBufferPtr ) : new ByteSearcher_v2( searchByte, readBufferPtr );
-        public static INewLineSearcher Create_NewLineSearcher( byte[] buf ) => Vector256.IsHardwareAccelerated ? new NewLineSearcher_With_Intrinsics( buf ) : new NewLineSearcher( buf );
+        public static IByteSearcher Create_ByteSearcher( byte searchByte ) => Vector128.IsHardwareAccelerated ? new ByteSearcher_With_Intrinsics_128( searchByte ) : new ByteSearcher( searchByte );
+        public static IByteSearcher_v2 Create_ByteSearcher_v2( byte searchByte, byte* readBufferPtr ) 
+            => Vector256.IsHardwareAccelerated ? new ByteSearcher_With_Intrinsics_v2_256( searchByte, readBufferPtr ) :
+               Vector128.IsHardwareAccelerated ? new ByteSearcher_With_Intrinsics_v2_128( searchByte, readBufferPtr ) : new ByteSearcher_v2( searchByte, readBufferPtr );
+
+        public static INewLineSearcher Create_NewLineSearcher( byte[] buf ) 
+            => Vector256.IsHardwareAccelerated ? new NewLineSearcher_With_Intrinsics_256( buf ) : new NewLineSearcher( buf );
     }
 
     /// <summary>
@@ -59,20 +73,16 @@ namespace _1brc
     /// <summary>
     /// 
     /// </summary>
-    unsafe internal class ByteSearcher_With_Intrinsics : ByteSearcher_Base
+    unsafe internal class ByteSearcher_With_Intrinsics_128 : ByteSearcher_Base
     {
-        protected const int VECTOR256_SIZE_IN_BYTES = 32; // (Vector256< byte >.Count >> 3);
-        protected const int VECTOR128_SIZE_IN_BYTES = 16; // (Vector128< byte >.Count >> 3);
-        protected const int VECTOR64_SIZE_IN_BYTES  = 8;  // (Vector64< byte >.Count >> 3);
-
         protected Vector256< byte > _SearchByte_Vector256;
         protected Vector128< byte > _SearchByte_Vector128;
         protected Vector64 < byte > _SearchByte_Vector64;
         protected byte _SearchByte;
 
-        public ByteSearcher_With_Intrinsics( byte searchByte )
+        public ByteSearcher_With_Intrinsics_128( byte searchByte )
         {
-            Debug.Assert( Vector256.IsHardwareAccelerated );
+            Debug.Assert( Vector128.IsHardwareAccelerated );
 
             _SearchByte = searchByte;
             _SearchByte_Vector256 = Vector256.Create( searchByte );
@@ -91,79 +101,47 @@ namespace _1brc
                 var ptr       = base_ptr + line_seg.Offset;
 
                 /*
-                if ( VECTOR256_SIZE_IN_BYTES <= len )
+                for (; ; )
                 {
-                    for (; ; )
+                    var next_start = start_idx + VECTOR128_SIZE_IN_BYTES;
+                    if ( len < next_start )
                     {
-                        var next_start = start_idx + VECTOR256_SIZE_IN_BYTES;
-                        if ( len < next_start )
-                        {
-                            break;
-                        }
-
-                        var matches = Vector256.Equals( Unsafe.ReadUnaligned< Vector256< byte > >( ptr + start_idx ), _SearchByte_Vector256 );
-                        var mask    = (uint) Avx2.MoveMask( matches );
-                        if ( mask != 0 )
-                        {
-                            var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
-                            idx = (int) (start_idx + tzcnt);
-                            return (idx);
-                        }
-
-                        start_idx = next_start;
+                        break;
                     }
+
+                    var matches = Vector128.Equals( Unsafe.ReadUnaligned< Vector128< byte > >( ptr + start_idx ), _SearchByte_Vector128 );
+                    var mask    = (uint) Sse2.MoveMask( matches );
+                    if ( mask != 0 )
+                    {
+                        var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
+                        idx = (int) (start_idx + tzcnt);
+                        return (idx);
+                    }
+
+                    start_idx = next_start;
                 }
-                else 
                 //*/
-                /*
-                if ( VECTOR128_SIZE_IN_BYTES <= len )
+                for (; ; )
                 {
-                    for (; ; )
+                    var next_start_idx = start_idx + _vc.VECTOR64_SIZE_IN_BYTES;
+                    if ( len < next_start_idx )
                     {
-                        var next_start = start_idx + VECTOR128_SIZE_IN_BYTES;
-                        if ( len < next_start )
-                        {
-                            break;
-                        }
-
-                        var matches = Vector128.Equals( Unsafe.ReadUnaligned< Vector128< byte > >( ptr + start_idx ), _SearchByte_Vector128 );
-                        var mask = (uint) Sse2.MoveMask( matches );
-                        if ( mask != 0 )
-                        {
-                            var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
-                            idx = (int) (start_idx + tzcnt);
-                            return (idx);
-                        }
-
-                        start_idx = next_start;
+                        break;
                     }
+
+                    var matches = Vector64.Equals( Unsafe.ReadUnaligned< Vector64< byte > >( ptr + start_idx ), _SearchByte_Vector64 );
+                    var mask    = (uint) Sse2.MoveMask( Vector64.ToVector128( matches ) );
+                    if ( mask != 0 )
+                    {
+                        var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
+                        idx = (int) (start_idx + tzcnt);
+                        return (idx);
+                    }
+
+                    start_idx = next_start_idx;
                 }
-                else if ( VECTOR64_SIZE_IN_BYTES <= len )
-                {
-                //*/
-                    for (; ; )
-                    {
-                        var next_start_idx = start_idx + VECTOR64_SIZE_IN_BYTES;
-                        if ( len < next_start_idx )
-                        {
-                            break;
-                        }
-
-                        var matches = Vector64.Equals( Unsafe.ReadUnaligned< Vector64< byte > >( ptr + start_idx ), _SearchByte_Vector64 );
-                        var mask = (uint) Sse2.MoveMask( Vector64.ToVector128( matches ) );
-                        if ( mask != 0 )
-                        {
-                            var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
-                            idx = (int) (start_idx + tzcnt);
-                            return (idx);
-                        }
-
-                        start_idx = next_start_idx;
-                    }
-                //}
 
                 idx = IndexOf( ptr, start_idx, len, _SearchByte ); Debug.Assert( 0 <= idx );
-                //---idx = line_seg.IndexOf( _SearchByte, start_idx, this ); Debug.Assert( 0 <= idx );
                 return (idx);
             }       
         }
@@ -186,25 +164,18 @@ namespace _1brc
     /// <summary>
     /// 
     /// </summary>
-    unsafe internal sealed class ByteSearcher_With_Intrinsics_v2 : IByteSearcher_v2
+    unsafe internal sealed class ByteSearcher_With_Intrinsics_v2_128 : IByteSearcher_v2
     {
-        private const int VECTOR256_SIZE_IN_BYTES = 32; // (Vector256< byte >.Count >> 3);
-        private const int VECTOR128_SIZE_IN_BYTES = 16; // (Vector128< byte >.Count >> 3);
-        private const int VECTOR64_SIZE_IN_BYTES  = 8;  // (Vector64< byte >.Count >> 3);
-
-        private Vector256< byte > _SearchByte_Vector256;
         private Vector128< byte > _SearchByte_Vector128;
         private Vector64 < byte > _SearchByte_Vector64;
-        private byte  _SearchByte;
         private byte* _Buf_BasePtr;
         private ByteSearcher_v2 _ByteSearcher_v2;
 
-        public ByteSearcher_With_Intrinsics_v2( byte searchByte, byte* readBufferPtr )
+        public ByteSearcher_With_Intrinsics_v2_128( byte searchByte, byte* readBufferPtr )
         {
-            Debug.Assert( Vector256.IsHardwareAccelerated );
+            Debug.Assert( Vector128.IsHardwareAccelerated );
 
-            _SearchByte = searchByte;
-            _SearchByte_Vector256 = Vector256.Create( searchByte );
+            SearchByte = searchByte;
             _SearchByte_Vector128 = Vector128.Create( searchByte );
             _SearchByte_Vector64  = Vector64.Create( searchByte );
 
@@ -213,80 +184,51 @@ namespace _1brc
         }
         public void Dispose() { }
 
+        public byte SearchByte { get; }
         public int IndexOf( int startIndex, int totalLength )
         {
             int idx;
             var start_idx = 0;
-            var ptr = _Buf_BasePtr + startIndex;
-            var len = totalLength - startIndex;
-            /*
-            if ( VECTOR256_SIZE_IN_BYTES <= totalLength )
+            var ptr       = _Buf_BasePtr + startIndex;
+
+            for (; ; )
             {
-                for (; ; )
+                var next_start = start_idx + _vc.VECTOR128_SIZE_IN_BYTES;
+                if ( totalLength < next_start )
                 {
-                    var next_start = start_idx + VECTOR256_SIZE_IN_BYTES;
-                    if ( totalLength < next_start )
-                    {
-                        break;
-                    }
-
-                    var matches = Vector256.Equals( Unsafe.ReadUnaligned< Vector256< byte > >( ptr + start_idx ), _SearchByte_Vector256 );
-                    var mask    = (uint) Avx2.MoveMask( matches );
-                    if ( mask != 0 )
-                    {
-                        var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
-                        idx = (int) (start_idx + tzcnt);
-                        return (idx);
-                    }
-
-                    start_idx = next_start;
+                    break;
                 }
+
+                var matches = Vector128.Equals( Unsafe.ReadUnaligned< Vector128< byte > >( ptr + start_idx ), _SearchByte_Vector128 );
+                var mask    = (uint) Sse2.MoveMask( matches );
+                if ( mask != 0 )
+                {
+                    var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
+                    idx = (int) (start_idx + tzcnt);
+                    return (idx);
+                }
+
+                start_idx = next_start;
             }
-            else 
-            //*/
-            if ( VECTOR128_SIZE_IN_BYTES <= len )
+
+            for (; ; )
             {
-                for (; ; )
+                var next_start_idx = start_idx + _vc.VECTOR64_SIZE_IN_BYTES;
+                if ( totalLength < next_start_idx )
                 {
-                    var next_start = start_idx + VECTOR128_SIZE_IN_BYTES;
-                    if ( totalLength < next_start )
-                    {
-                        break;
-                    }
-
-                    var matches = Vector128.Equals( Unsafe.ReadUnaligned< Vector128< byte > >( ptr + start_idx ), _SearchByte_Vector128 );
-                    var mask = (uint) Sse2.MoveMask( matches );
-                    if ( mask != 0 )
-                    {
-                        var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
-                        idx = (int) (start_idx + tzcnt);
-                        return (idx);
-                    }
-
-                    start_idx = next_start;
+                    break;
                 }
-            }
-            else if ( VECTOR64_SIZE_IN_BYTES <= len )
-            {
-                for (; ; )
+
+                var matches = Vector64.Equals( Unsafe.ReadUnaligned< Vector64< byte > >( ptr + start_idx ), _SearchByte_Vector64 );
+                var mask    = (uint) Sse2.MoveMask( Vector64.ToVector128( matches ) );
+                if ( mask != 0 )
                 {
-                    var next_start_idx = start_idx + VECTOR64_SIZE_IN_BYTES;
-                    if ( totalLength < next_start_idx )
-                    {
-                        break;
-                    }
-
-                    var matches = Vector64.Equals( Unsafe.ReadUnaligned< Vector64< byte > >( ptr + start_idx ), _SearchByte_Vector64 );
-                    var mask = (uint) Sse2.MoveMask( Vector64.ToVector128( matches ) );
-                    if ( mask != 0 )
-                    {
-                        var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
-                        idx = (int) (start_idx + tzcnt);
-                        return (idx);
-                    }
-
-                    start_idx = next_start_idx;
+                    var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
+                    idx = (int) (start_idx + tzcnt);
+                    return (idx);
                 }
+
+                start_idx = next_start_idx;
             }
 
             idx = _ByteSearcher_v2.IndexOf( startIndex + start_idx, totalLength ); Debug.Assert( 0 <= idx );
@@ -297,121 +239,214 @@ namespace _1brc
     /// <summary>
     /// 
     /// </summary>
-    unsafe internal sealed class NewLineSearcher_With_Intrinsics : ByteSearcher_With_Intrinsics, INewLineSearcher
+    unsafe internal sealed class ByteSearcher_With_Intrinsics_v2_256 : IByteSearcher_v2
+    {
+        private Vector256< byte > _SearchByte_Vector256;
+        private Vector128< byte > _SearchByte_Vector128;
+        private Vector64 < byte > _SearchByte_Vector64;
+        private byte* _Buf_BasePtr;
+        private ByteSearcher_v2 _ByteSearcher_v2;
+
+        public ByteSearcher_With_Intrinsics_v2_256( byte searchByte, byte* readBufferPtr )
+        {
+            Debug.Assert( Vector256.IsHardwareAccelerated );
+
+            SearchByte = searchByte;
+            _SearchByte_Vector256 = Vector256.Create( searchByte );
+            _SearchByte_Vector128 = Vector128.Create( searchByte );
+            _SearchByte_Vector64  = Vector64.Create( searchByte );
+
+            _Buf_BasePtr = readBufferPtr;
+            _ByteSearcher_v2 = new ByteSearcher_v2( searchByte, readBufferPtr );
+        }
+        public void Dispose() { }
+
+        public byte SearchByte { get; }
+        public int IndexOf( int startIndex, int totalLength )
+        {
+            int idx;
+            var start_idx = 0;
+            var ptr       = _Buf_BasePtr + startIndex;
+
+            for (; ; )
+            {
+                var next_start = start_idx + _vc.VECTOR256_SIZE_IN_BYTES;
+                if ( totalLength < next_start )
+                {
+                    break;
+                }
+
+                var matches = Vector256.Equals( Unsafe.ReadUnaligned< Vector256< byte > >( ptr + start_idx ), _SearchByte_Vector256 );
+                var mask    = (uint) Avx2.MoveMask( matches );
+                if ( mask != 0 )
+                {
+                    var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
+                    idx = (int) (start_idx + tzcnt);
+                    return (idx);
+                }
+
+                start_idx = next_start;
+            }
+
+            for (; ; )
+            {
+                var next_start = start_idx + _vc.VECTOR128_SIZE_IN_BYTES;
+                if ( totalLength < next_start )
+                {
+                    break;
+                }
+
+                var matches = Vector128.Equals( Unsafe.ReadUnaligned< Vector128< byte > >( ptr + start_idx ), _SearchByte_Vector128 );
+                var mask    = (uint) Sse2.MoveMask( matches );
+                if ( mask != 0 )
+                {
+                    var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
+                    idx = (int) (start_idx + tzcnt);
+                    return (idx);
+                }
+
+                start_idx = next_start;
+            }
+
+            for (; ; )
+            {
+                var next_start_idx = start_idx + _vc.VECTOR64_SIZE_IN_BYTES;
+                if ( totalLength < next_start_idx )
+                {
+                    break;
+                }
+
+                var matches = Vector64.Equals( Unsafe.ReadUnaligned< Vector64< byte > >( ptr + start_idx ), _SearchByte_Vector64 );
+                var mask    = (uint) Sse2.MoveMask( Vector64.ToVector128( matches ) );
+                if ( mask != 0 )
+                {
+                    var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
+                    idx = (int) (start_idx + tzcnt);
+                    return (idx);
+                }
+
+                start_idx = next_start_idx;
+            }
+
+
+            idx = _ByteSearcher_v2.IndexOf( startIndex + start_idx, totalLength ); Debug.Assert( 0 <= idx );
+            return (idx);
+        }
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    unsafe internal sealed class NewLineSearcher_With_Intrinsics_256 : ByteSearcher_With_Intrinsics_128, INewLineSearcher
     {
         private byte[]   _Buf;
         private GCHandle _Buf_GCHandle;
         private byte*    _Buf_BasePtr;
-        public NewLineSearcher_With_Intrinsics( byte[] buf ) : base( (byte) '\n' )
+        public NewLineSearcher_With_Intrinsics_256( byte[] buf ) : base( (byte) '\n' )
         {
+            Debug.Assert( Vector256.IsHardwareAccelerated );
+
             _Buf          = buf;
             _Buf_GCHandle = GCHandle.Alloc( buf, GCHandleType.Pinned );
             _Buf_BasePtr  = (byte*) _Buf_GCHandle.AddrOfPinnedObject().ToPointer();
         }
-        ~NewLineSearcher_With_Intrinsics() => _Buf_GCHandle.Free();
+        ~NewLineSearcher_With_Intrinsics_256() => _Buf_GCHandle.Free();
         public override void Dispose()
         {
             GC.SuppressFinalize( this );
             _Buf_GCHandle.Free();
         }
 
-        public int IndexOfNewLine( /*byte[] buf, */int startIndex, int total_length, out int skip_char_cnt )
+        public int IndexOfNewLine( int startIndex, int total_length, out int skip_char_cnt )
         {
             int idx;
-            //var len = (total_length - startIndex);
-            //if ( VECTOR256_SIZE_IN_BYTES <= len )
-            //{
-                for (; ; )
+
+            for (; ; )
+            {
+                var next_start = startIndex + _vc.VECTOR256_SIZE_IN_BYTES;
+                if ( total_length < next_start )
                 {
-                    var next_start = startIndex + VECTOR256_SIZE_IN_BYTES;
-                    if ( total_length < next_start )
-                    {
-                        break;
-                    }
-
-                    var matches = Vector256.Equals( Unsafe.ReadUnaligned< Vector256< byte > >( _Buf_BasePtr + startIndex ), _SearchByte_Vector256 );
-                    var mask    = (uint) Avx2.MoveMask( matches );
-                    if ( mask != 0 )
-                    {
-                        var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
-                        idx = (int) (startIndex + tzcnt);
-                        if ( (0 < idx) && (_Buf_BasePtr[ idx - 1 ] == '\r') )
-                        {
-                            idx--;
-                            skip_char_cnt = 1;
-                        }
-                        else
-                        {
-                            skip_char_cnt = 0;
-                        }
-                        return (idx);
-                    }
-
-                    startIndex = next_start;
+                    break;
                 }
-            //}
-            //else if ( VECTOR128_SIZE_IN_BYTES <= len )
-            //{
-                for (; ; )
+
+                var matches = Vector256.Equals( Unsafe.ReadUnaligned< Vector256< byte > >( _Buf_BasePtr + startIndex ), _SearchByte_Vector256 );
+                var mask    = (uint) Avx2.MoveMask( matches );
+                if ( mask != 0 )
                 {
-                    var next_start = startIndex + VECTOR128_SIZE_IN_BYTES;
-                    if ( total_length < next_start )
+                    var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
+                    idx = (int) (startIndex + tzcnt);
+                    if ( (0 < idx) && (_Buf_BasePtr[ idx - 1 ] == '\r') )
                     {
-                        break;
+                        idx--;
+                        skip_char_cnt = 1;
                     }
-
-                    var matches = Vector128.Equals( Unsafe.ReadUnaligned< Vector128< byte > >( _Buf_BasePtr + startIndex ), _SearchByte_Vector128 );
-                    var mask    = (uint) Sse2.MoveMask( matches );
-                    if ( mask != 0 )
+                    else
                     {
-                        var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
-                        idx = (int) (startIndex + tzcnt);
-                        if ( (0 < idx) && (_Buf_BasePtr[ idx - 1 ] == '\r') )
-                        {
-                            idx--;
-                            skip_char_cnt = 1;
-                        }
-                        else
-                        {
-                            skip_char_cnt = 0;
-                        }
-                        return (idx);
+                        skip_char_cnt = 0;
                     }
-
-                    startIndex = next_start;
+                    return (idx);
                 }
-            //}
-            //else if ( VECTOR64_SIZE_IN_BYTES <= len )
-            //{
-                for (; ; )
+
+                startIndex = next_start;
+            }
+
+            for (; ; )
+            {
+                var next_start = startIndex + _vc.VECTOR128_SIZE_IN_BYTES;
+                if ( total_length < next_start )
                 {
-                    var next_start_idx = startIndex + VECTOR64_SIZE_IN_BYTES;
-                    if ( total_length < next_start_idx )
-                    {
-                        break;
-                    }
-
-                    var matches = Vector64.Equals( Unsafe.ReadUnaligned< Vector64< byte > >( _Buf_BasePtr + startIndex ), _SearchByte_Vector64 );
-                    var mask    = (uint) Sse2.MoveMask( Vector64.ToVector128( matches ) );
-                    if ( mask != 0 )
-                    {
-                        var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
-                        idx = (int) (startIndex + tzcnt);
-                        if ( (0 < idx) && (_Buf_BasePtr[ idx - 1 ] == '\r') )
-                        {
-                            idx--;
-                            skip_char_cnt = 1;
-                        }
-                        else
-                        {
-                            skip_char_cnt = 0;
-                        }
-                        return (idx);
-                    }
-
-                    startIndex = next_start_idx;
+                    break;
                 }
-            //}
+
+                var matches = Vector128.Equals( Unsafe.ReadUnaligned< Vector128< byte > >( _Buf_BasePtr + startIndex ), _SearchByte_Vector128 );
+                var mask    = (uint) Sse2.MoveMask( matches );
+                if ( mask != 0 )
+                {
+                    var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
+                    idx = (int) (startIndex + tzcnt);
+                    if ( (0 < idx) && (_Buf_BasePtr[ idx - 1 ] == '\r') )
+                    {
+                        idx--;
+                        skip_char_cnt = 1;
+                    }
+                    else
+                    {
+                        skip_char_cnt = 0;
+                    }
+                    return (idx);
+                }
+
+                startIndex = next_start;
+            }
+
+            for (; ; )
+            {
+                var next_start_idx = startIndex + _vc.VECTOR64_SIZE_IN_BYTES;
+                if ( total_length < next_start_idx )
+                {
+                    break;
+                }
+
+                var matches = Vector64.Equals( Unsafe.ReadUnaligned< Vector64< byte > >( _Buf_BasePtr + startIndex ), _SearchByte_Vector64 );
+                var mask    = (uint) Sse2.MoveMask( Vector64.ToVector128( matches ) );
+                if ( mask != 0 )
+                {
+                    var tzcnt = (uint) BitOperations.TrailingZeroCount( mask );
+                    idx = (int) (startIndex + tzcnt);
+                    if ( (0 < idx) && (_Buf_BasePtr[ idx - 1 ] == '\r') )
+                    {
+                        idx--;
+                        skip_char_cnt = 1;
+                    }
+                    else
+                    {
+                        skip_char_cnt = 0;
+                    }
+                    return (idx);
+                }
+
+                startIndex = next_start_idx;
+            }
 
             //---idx = NewLineSearcher._IndexOfNewLine_( _Buf, startIndex, total_length, out skip_char_cnt );
             idx = NewLineSearcher._IndexOfNewLine_( _Buf_BasePtr, startIndex, total_length, out skip_char_cnt );
@@ -469,8 +504,8 @@ namespace _1brc
         private byte[] _Buf;
         public NewLineSearcher( byte[] buf ) => _Buf = buf;
         public void Dispose() { }
-        public int IndexOfNewLine( /*byte[] buf,*/ int startIndex, int length, out int skip_char_cnt ) => _IndexOfNewLine_( _Buf, startIndex, length, out skip_char_cnt );
-        [M(O.AggressiveInlining)] public static int _IndexOfNewLine_( byte[] buf, int startIndex, int length, out int skip_char_cnt )
+        public int IndexOfNewLine( int startIndex, int length, out int skip_char_cnt ) => _IndexOfNewLine_( _Buf, startIndex, length, out skip_char_cnt );
+        [M(O.AggressiveInlining)] private static int _IndexOfNewLine_( byte[] buf, int startIndex, int length, out int skip_char_cnt )
         {
             for ( int i = startIndex, end = length - 1; i <= end; i++ )
             {

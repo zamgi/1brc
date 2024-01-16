@@ -1,8 +1,6 @@
 ﻿using System.Diagnostics;
 using System.IO;
 
-using static System.Collections.Specialized.BitVector32;
-
 using M = System.Runtime.CompilerServices.MethodImplAttribute;
 using O = System.Runtime.CompilerServices.MethodImplOptions;
 
@@ -56,7 +54,8 @@ namespace System
 #if DEBUG
                 total_read_cnt += read_cnt;
 #endif
-                var idx = readBuffer.LastIndexOfNewLine( read_cnt ); Debug.Assert( 0 <= idx );
+                var idx = readBufferSpan.Slice( 0, read_cnt ).LastIndexOfNewLine(); Debug.Assert( 0 <= idx );
+                //---var idx = readBuffer.LastIndexOfNewLine( read_cnt ); Debug.Assert( 0 <= idx );
                 var rem_len = read_cnt - (idx + 1);
                 if ( 0 < rem_len )
                 {
@@ -105,7 +104,8 @@ namespace System
                 }
                 else
                 {
-                    var idx = readBuffer.LastIndexOfNewLine( read_cnt ); Debug.Assert( 0 <= idx );
+                    var idx = readBufferSpan.Slice( 0, read_cnt ).LastIndexOfNewLine(); Debug.Assert( 0 <= idx );
+                    //---var idx = readBuffer.LastIndexOfNewLine( read_cnt ); Debug.Assert( 0 <= idx );
                     var rem_len = read_cnt - (idx + 1);
                     if ( 0 < rem_len )
                     {
@@ -118,7 +118,25 @@ namespace System
             }
         }
 
+        [M(O.AggressiveInlining)] private static int LastIndexOfNewLine( this in Span< byte > span )
+        {
+            for ( int i = span.Length - 1; 0 <= i; i-- )
+            {
+                switch ( span[ i ] )
+                {
+                    case (byte) '\r':
+                        return (i);
 
+                    case (byte) '\n':
+                        if  ( (0 < i) && (span[ i - 1 ] == '\r') )
+                        {
+                            i--;
+                        }
+                        return (i);
+                }
+            }
+            return (-1);
+        }
         [M(O.AggressiveInlining)] private static int LastIndexOfNewLine( this byte[] buf, int length )
         {
             var span = buf.AsSpan( 0, length );
@@ -141,12 +159,12 @@ namespace System
         }
 
 
-        [M(O.AggressiveInlining)] private static int Read_WithLock( this FileStream fs, object readFileLock, byte[] buffer )//, int offset, int count )
-        {
-            lock ( readFileLock )
-            {
-                return (fs.Read( buffer, 0/*offset*/, buffer.Length/*count*/ ));
-            }
-        }
+        //[M(O.AggressiveInlining)] private static int Read_WithLock( this SafeFileHandle fileHandle, object readFileLock, in Span< byte > readBufferSpan, long fileOffset )
+        //{
+        //    lock ( readFileLock )
+        //    {
+        //        return (RandomAccess.Read( fileHandle, readBufferSpan, fileOffset ));
+        //    }
+        //}
     }
 }

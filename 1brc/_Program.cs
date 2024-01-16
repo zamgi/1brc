@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Runtime.Intrinsics;
 
@@ -18,13 +19,14 @@ namespace _1brc
             {
                 const string FILE_NAME = "../../[data]/1brc_100M.txt"; //"../../[data]/1brc_1B.txt"; //
 
-                var path = args.FirstOrDefault() ?? FILE_NAME;
+                var fn = args.FirstOrDefault() ?? FILE_NAME;
 
                 Console.WriteLine( $"Vector512.IsHardwareAccelerated: {Vector512.IsHardwareAccelerated}" );
                 Console.WriteLine( $"Vector256.IsHardwareAccelerated: {Vector256.IsHardwareAccelerated}" );
                 Console.WriteLine( $"Vector128.IsHardwareAccelerated: {Vector128.IsHardwareAccelerated}" );
-                Console.WriteLine( $"Vector64.IsHardwareAccelerated : {Vector64.IsHardwareAccelerated}" );
+                Console.WriteLine( $" Vector64.IsHardwareAccelerated: {Vector64.IsHardwareAccelerated}" );
                 //Console.WriteLine( $"System.Numerics.Vector.IsHardwareAccelerated: {System.Numerics.Vector.IsHardwareAccelerated}" );
+                Console.WriteLine( $"FILE_NAME: '{Path.GetFullPath( fn )}'" );
                 Console.WriteLine();
                 //-------------------------------------------------------//
 
@@ -40,7 +42,7 @@ namespace _1brc
                 var innerBufferCapacity = 4096 * 1_000; //3.9MB
                 sw.Restart();
                 var suc = GC.TryStartNoGCRegion( int.MaxValue );
-                var map = FileProcessor_LR.Process_v2( path, chunkCount: Environment.ProcessorCount, innerBufferCapacity );
+                var map = FileProcessor_LR.Process_v2( fn, chunkCount: Environment.ProcessorCount, innerBufferCapacity );
                 if ( suc ) GC.EndNoGCRegion();
                 sw.Stop();
 
