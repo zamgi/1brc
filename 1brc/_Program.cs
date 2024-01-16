@@ -17,7 +17,7 @@ namespace _1brc
             Console.ResetColor();
             try
             {
-                const string FILE_NAME = "../../[data]/1brc_100M.txt"; //"../../[data]/1brc_1B.txt"; //
+                const string FILE_NAME = "../../[data]/1brc_1B.txt"; //"../../[data]/1brc_100M.txt"; //
 
                 var fn = args.FirstOrDefault() ?? FILE_NAME;
 
@@ -39,11 +39,13 @@ namespace _1brc
                 //var innerBufferCapacity = (1 << 10); //1KB
                 //var innerBufferCapacity = 512 * 10_000; //4.8MB
                 //var innerBufferCapacity = 4096 * 10_000; //39MB
+                //var innerBufferCapacity = 4096 * 25_000; //97MB
                 var innerBufferCapacity = 4096 * 1_000; //3.9MB
                 sw.Restart();
                 var suc = GC.TryStartNoGCRegion( int.MaxValue );
                 var map = FileProcessor_LR.Process_v2( fn, chunkCount: Environment.ProcessorCount, innerBufferCapacity );
-                if ( suc ) GC.EndNoGCRegion();
+                //---var map = FileProcessor_LR.Process_v2_Plus( fn, chunkCount: Environment.ProcessorCount, innerBufferCapacity );
+                try { if ( suc ) GC.EndNoGCRegion(); } catch {; }
                 sw.Stop();
 
                 map.Print2Console();
