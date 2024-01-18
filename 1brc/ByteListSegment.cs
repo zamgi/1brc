@@ -1,28 +1,257 @@
-﻿using System.Diagnostics;
-using System.Runtime.InteropServices;
+﻿using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Text;
 using System.Threading;
 
 using M = System.Runtime.CompilerServices.MethodImplAttribute;
 using O = System.Runtime.CompilerServices.MethodImplOptions;
 
-namespace System.Collections.Generic
+namespace _1brc
 {
     /// <summary>
     /// 
     /// </summary>
-    public interface IEqualityComparerByRef< T > //: IEqualityComparer< T >
+    internal struct ByteListSegment : IList< byte >, IReadOnlyList< byte >
     {
-        bool Equals( in T x, in T y );
-        int GetHashCode( in T obj );
+        /// <summary>
+        /// 
+        /// </summary>
+        public struct Enumerator : IEnumerator< byte >
+        {
+            private readonly byte[] _Array;
+            private readonly int _Start;
+            private readonly int _End; 
+            private int _Idx;
+
+            internal Enumerator( in ByteListSegment seg )
+            {
+                Debug.Assert( seg._Array != null );
+                Debug.Assert( seg._Offset >= 0 );
+                Debug.Assert( seg._Count >= 0 );
+                Debug.Assert( seg._Offset + seg._Count <= seg._Array.Length );
+
+                _Array = seg._Array;
+                _Start = seg._Offset;
+                _End   = seg._Offset + seg._Count;
+                _Idx   = seg._Offset - 1;
+            }
+
+            public bool MoveNext()
+            {
+                if ( _Idx < _End )
+                {
+                    _Idx++;
+                    return (_Idx < _End);
+                }
+                return (false);
+            }
+
+            public byte Current
+            {
+                get
+                {
+#if DEBUG
+                    if ( _Idx < _Start ) throw (new InvalidOperationException());
+                    if ( _Idx >= _End ) throw (new InvalidOperationException());
+#endif
+                    return (_Array[ _Idx ]);
+                }
+            }
+
+            object IEnumerator.Current => Current;
+            void IEnumerator.Reset() => _Idx = _Start - 1;
+            public void Dispose() { }
+        }
+
+        private byte[] _Array;
+        private int _Offset;
+        private int _Count;
+
+        [M(O.AggressiveInlining)] public ByteListSegment( DirectAccessList< byte > lst )
+        {
+            _Array  = lst.GetInnerArray() ?? throw (new ArgumentNullException());
+            _Offset = 0;
+            _Count  = lst.Count;
+        }
+        [M(O.AggressiveInlining)] public ByteListSegment( DirectAccessList< byte > lst, int offset, int count )
+        {            
+            if ( lst == null || (uint) offset > (uint) lst.Count || (uint) count > (uint) (lst.Count - offset) ) throw (new ArgumentException());
+
+            _Array  = lst.GetInnerArray();
+            _Offset = offset;
+            _Count  = count;
+        }
+        [M(O.AggressiveInlining)] public ByteListSegment( byte[] array )
+        {
+            _Array  = array ?? throw (new ArgumentNullException());
+            _Offset = 0;
+            _Count  = array.Length;
+        }
+        [M(O.AggressiveInlining)] public ByteListSegment( byte[] array, int offset, int count )
+        {            
+            if ( array == null ) throw (new ArgumentException( "array == null" ));
+            if ( (uint) offset > (uint) array.Length ) throw (new ArgumentException( $"[(uint) offset > (uint) array.Length], offset={(uint) offset}, array.Length={(uint) array.Length}" ));
+            if ( (uint) count > (uint) (array.Length - offset) ) throw (new ArgumentException( $"[(uint) count > (uint) (array.Length - offset)], count={count}, array.Length={array.Length}, offset={offset}, (uint)(array.Length - offset)={(uint) (array.Length - offset)}" ));
+
+            _Array  = array;
+            _Offset = offset;
+            _Count  = count;
+        }
+
+
+        public byte[] Array  { [M(O.AggressiveInlining)] get => _Array; }
+        public int    Offset { [M(O.AggressiveInlining)] get => _Offset; }
+        public int    Count  { [M(O.AggressiveInlining)] get => _Count; }
+
+        public byte this[ int index ]
+        {
+            get
+            {
+                if ( (uint) index >= (uint) _Count ) throw (new ArgumentOutOfRangeException());
+
+                return _Array[ _Offset + index ];
+            }
+            set
+            {
+                if ( (uint) index >= (uint) _Count ) throw (new ArgumentOutOfRangeException());
+
+                _Array[ _Offset + index ] = value;
+            }
+        }
+
+        private int _Hash;
+        public override int GetHashCode() 
+        {
+            if ( _Hash == 0 ) _Hash = HashHelper.Calc( this.AsSpan() );
+            return (_Hash);
+        }        
+
+        public void CopyTo( byte[] destination ) => CopyTo( destination, 0 );
+        public void CopyTo( byte[] destination, int destinationIndex ) => this.AsSpan().CopyTo( new Span< byte >( destination, destinationIndex, _Count ) );
+        public void CopyTo( ListSegment< byte > destination ) => throw (new NotSupportedException());
+
+        public override bool Equals( object obj ) => (obj is ByteListSegment other) && Equals( in other );
+        public bool Equals( ByteListSegment other ) => HashHelper.IsEqualByBytes( this.AsSpan(), other.AsSpan() ); //(obj._Array == _Array) && (obj._Offset == _Offset) && (obj._Count == _Count);
+        public bool Equals( in ByteListSegment other ) => HashHelper.IsEqualByBytes( this.AsSpan(), other.AsSpan() );
+
+        [M(O.AggressiveInlining)] public ByteListSegment Slice( int index )
+        {
+#if DEBUG
+            if ( (uint) index > (uint) _Count ) throw (new ArgumentOutOfRangeException()); 
+#endif
+            return (new ByteListSegment( _Array, _Offset + index, _Count - index ));
+        }
+        [M(O.AggressiveInlining)] public ByteListSegment Slice( int index, int count )
+        {
+#if DEBUG
+            if ( (uint) index > (uint) _Count || (uint) count > (uint) (_Count - index) ) throw (new ArgumentOutOfRangeException());
+#endif
+            return (new ByteListSegment( _Array, _Offset + index, count ));
+        }
+        [M(O.AggressiveInlining)] public Span< byte > AsSpan() => new Span< byte >( _Array, _Offset, _Count );
+
+        [M(O.AggressiveInlining)] public byte[] ToArray()
+        {
+            var array = new byte[ _Count ];
+            this.AsSpan().CopyTo( array );
+            return (array);
+        }
+        [M(O.AggressiveInlining)] public int IndexOf( byte t )
+        {
+            var span = this.AsSpan();
+            for ( var i = 0; i < _Count; i++ )
+            {
+                if ( span[ i ] == t )
+                {
+                    return (i);
+                }
+            }
+            return (-1);
+        }
+        [M(O.AggressiveInlining)] public int IndexOf( byte t, int startIndex )
+        {
+            var span = this.AsSpan();
+            for ( ; startIndex < _Count; startIndex++ )
+            {
+                if ( span[ startIndex ] == t )
+                {
+                    return (startIndex);
+                }
+            }
+            return (-1);
+        }
+
+        public static bool operator ==( in ByteListSegment a, in ByteListSegment b ) => a.Equals( in b );
+        public static bool operator !=( in ByteListSegment a, in ByteListSegment b ) => !(a == b);
+
+        public static implicit operator ByteListSegment( DirectAccessList< byte > lst ) => (lst != null) ? new ByteListSegment( lst ) : default;
+        public static implicit operator ByteListSegment( byte[] array ) => (array != null) ? new ByteListSegment( array ) : default;
+
+        #region IList< T >
+        byte IList< byte >.this[ int index ]
+        {
+            get
+            {
+                if ( index < 0 || index >= _Count ) throw (new ArgumentOutOfRangeException());
+
+                return _Array[ _Offset + index ];
+            }
+
+            set
+            {
+                if ( index < 0 || index >= _Count ) throw (new ArgumentOutOfRangeException());
+
+                _Array[ _Offset + index ] = value;
+            }
+        }
+        int IList< byte >.IndexOf( byte item ) => throw (new NotSupportedException());
+        void IList< byte >.Insert( int index, byte item ) => throw (new NotSupportedException());
+        void IList< byte >.RemoveAt( int index ) => throw (new NotSupportedException());
+        #endregion
+
+        #region IReadOnlyList< T >
+        byte IReadOnlyList< byte >.this[ int index ]
+        {
+            get
+            {
+                if ( index < 0 || index >= _Count ) throw (new ArgumentOutOfRangeException());
+
+                return _Array[ _Offset + index ];
+            }
+        }
+        #endregion
+
+        #region ICollection< T >
+        bool ICollection< byte >.IsReadOnly => true;
+
+        void ICollection< byte >.Add( byte item ) => throw (new NotSupportedException());
+        void ICollection< byte >.Clear() => throw (new NotSupportedException());
+
+        bool ICollection< byte >.Contains( byte item ) => throw (new NotSupportedException());
+        bool ICollection< byte >.Remove( byte item ) => throw (new NotSupportedException());
+        #endregion
+
+        #region IEnumerable< T >
+        IEnumerator< byte > IEnumerable< byte >.GetEnumerator() => new Enumerator( this );
+        IEnumerator IEnumerable.GetEnumerator() => new Enumerator( this );
+        #endregion
+        
+        public override string ToString() => Encoding.UTF8.GetString( this.ToArray() );
     }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    internal delegate ByteListSegment GenNewKeyDelegate( in ByteListSegment key );
 
     /// <summary>
     /// 
     /// </summary>
     [DebuggerTypeProxy(typeof(MapDebugView<,>))]
     [DebuggerDisplay("Count = {Count}")]
-    [ComVisible(false)]
-    public class Map< K, T > : IDictionary< K, T >, ICollection< KeyValuePair< K, T > >, IReadOnlyDictionary< K, T >, IReadOnlyCollection< KeyValuePair< K, T > >, ICollection, IDictionary
+    internal sealed class Map_ByteListSegment< T > : IDictionary< ByteListSegment, T >, ICollection< KeyValuePair< ByteListSegment, T > >, IReadOnlyDictionary< ByteListSegment, T >, IReadOnlyCollection< KeyValuePair< ByteListSegment, T > >, ICollection, IDictionary
     {
         /// <summary>
         /// 
@@ -31,39 +260,39 @@ namespace System.Collections.Generic
         {
             public int HashCode;
             public int Next;
-            public K   Key;
+            public ByteListSegment Key;
             public T   Value;
         }
 
         /// <summary>
         /// 
         /// </summary>
-        public struct Enumerator : IEnumerator< KeyValuePair< K, T > >, IDisposable, IEnumerator, IDictionaryEnumerator
+        public struct Enumerator : IEnumerator< KeyValuePair< ByteListSegment, T > >, IDisposable, IEnumerator, IDictionaryEnumerator
         {
             internal const int DictEntry    = 1;
             internal const int KeyValuePair = 2;
 
-            private Map< K, T > _Map;
+            private Map_ByteListSegment< T > _Map;
             private int _Index;
-            private KeyValuePair< K, T > _Current;
+            private KeyValuePair< ByteListSegment, T > _Current;
             private int _RetTypeOfEnumerator;
 
-            internal Enumerator( Map< K, T > dictionary, int retTypeOfEnumerator )
+            internal Enumerator( Map_ByteListSegment< T > dictionary, int retTypeOfEnumerator )
             {
-                _Map = dictionary;
+                _Map   = dictionary;
                 _Index = 0;
                 _RetTypeOfEnumerator = retTypeOfEnumerator;
                 _Current = default;
             }
 
-            public KeyValuePair< K, T > Current => _Current;
+            public KeyValuePair< ByteListSegment, T > Current => _Current;
             public bool MoveNext()
             {
                 while ( (uint) _Index < (uint) _Map._Count )
                 {
                     if ( 0 <= _Map._Entries[ _Index ].HashCode )
                     {
-                        _Current = new KeyValuePair< K, T >( _Map._Entries[ _Index ].Key, _Map._Entries[ _Index ].Value );
+                        _Current = new KeyValuePair< ByteListSegment, T >( _Map._Entries[ _Index ].Key, _Map._Entries[ _Index ].Value );
                         _Index++;
                         return (true);
                     }
@@ -84,9 +313,9 @@ namespace System.Collections.Generic
                     
                     if ( _RetTypeOfEnumerator == 1 )
                     {
-                        return new DictionaryEntry( _Current.Key, _Current.Value );
+                        return (new DictionaryEntry( _Current.Key, _Current.Value ));
                     }
-                    return new KeyValuePair< K, T >( _Current.Key, _Current.Value );
+                    return (new KeyValuePair< ByteListSegment, T >( _Current.Key, _Current.Value ));
                 }
             }
             DictionaryEntry IDictionaryEnumerator.Entry
@@ -94,38 +323,29 @@ namespace System.Collections.Generic
 
                 get
                 {
-                    if ( _Index == 0 || (_Index == _Map._Count + 1) )
-                    {
-                        throw (new InvalidOperationException( "InvalidOperation_EnumOpCantHappen" ));
-                    }
-                    return new DictionaryEntry( _Current.Key, _Current.Value );
+                    if ( _Index == 0 || (_Index == _Map._Count + 1) ) throw (new InvalidOperationException( "InvalidOperation_EnumOpCantHappen" ));
+                    return (new DictionaryEntry( _Current.Key, _Current.Value ));
                 }
             }
             object IDictionaryEnumerator.Key
             {
                 get
                 {
-                    if ( _Index == 0 || _Index == _Map._Count + 1 )
-                    {
-                        throw (new InvalidOperationException( "InvalidOperation_EnumOpCantHappen" ));
-                    }
-                    return _Current.Key;
+                    if ( _Index == 0 || _Index == _Map._Count + 1 ) throw (new InvalidOperationException( "InvalidOperation_EnumOpCantHappen" ));
+                    return (_Current.Key);
                 }
             }
             object IDictionaryEnumerator.Value
             {
                 get
                 {
-                    if ( _Index == 0 || _Index == _Map._Count + 1 )
-                    {
-                        throw (new InvalidOperationException( "InvalidOperation_EnumOpCantHappen" ));
-                    }
-                    return _Current.Value;
+                    if ( _Index == 0 || _Index == _Map._Count + 1 ) throw (new InvalidOperationException( "InvalidOperation_EnumOpCantHappen" ));
+                    return (_Current.Value);
                 }
             }
             void IEnumerator.Reset()
             {
-                _Index = 0;
+                _Index   = 0;
                 _Current = default;
             }
         }
@@ -135,27 +355,27 @@ namespace System.Collections.Generic
         /// </summary>
         [DebuggerTypeProxy(typeof(MapCollectionDebugView<,>))]
         [DebuggerDisplay("Count = {Count}")]
-        public sealed class KeyCollection : ICollection< K >, IEnumerable< K >, IReadOnlyCollection< K >, ICollection
+        public sealed class KeyCollection : ICollection< ByteListSegment >, IEnumerable< ByteListSegment >, IReadOnlyCollection< ByteListSegment >, ICollection
         {
             /// <summary>
             /// 
             /// </summary>
-            public struct Enumerator : IEnumerator< K >, IDisposable, IEnumerator
+            public struct Enumerator : IEnumerator< ByteListSegment >, IDisposable, IEnumerator
             {
-                private Map< K, T > _Map;
+                private Map_ByteListSegment< T > _Map;
                 private int _Index;
-                private K _CurrentKey;
+                private ByteListSegment _CurrentKey;
 
-                public K Current => _CurrentKey;
+                public ByteListSegment Current => _CurrentKey;
                 object IEnumerator.Current
                 {
                     get
                     {
                         if ( _Index == 0 || _Index == _Map._Count + 1 ) throw (new InvalidOperationException( "InvalidOperation_EnumOpCantHappen" ));
-                        return _CurrentKey;
+                        return (_CurrentKey);
                     }
                 }
-                internal Enumerator( Map< K, T > dictionary )
+                internal Enumerator( Map_ByteListSegment< T > dictionary )
                 {
                     _Map = dictionary;
                     _Index = 0;
@@ -186,17 +406,17 @@ namespace System.Collections.Generic
                 }
             }
 
-            private Map< K, T > _Map;
+            private Map_ByteListSegment< T > _Map;
 
             public int Count => _Map.Count;
-            bool ICollection< K >.IsReadOnly => true;
+            bool ICollection< ByteListSegment >.IsReadOnly => true;
             bool ICollection.IsSynchronized => false;
             object ICollection.SyncRoot => ((ICollection) _Map).SyncRoot;
 
-            public KeyCollection( Map< K, T > dictionary ) => _Map = dictionary ?? throw (new ArgumentNullException());
+            public KeyCollection( Map_ByteListSegment< T > dictionary ) => _Map = dictionary ?? throw (new ArgumentNullException());
             public Enumerator GetEnumerator() => new Enumerator( _Map );
 
-            public void CopyTo( K[] array, int index )
+            public void CopyTo( ByteListSegment[] array, int index )
             {
                 if ( array == null ) throw (new ArgumentNullException( "array" ));
                 if ( index < 0 || index > array.Length ) throw (new ArgumentOutOfRangeException());
@@ -213,12 +433,12 @@ namespace System.Collections.Generic
                 }
             }
 
-            void ICollection< K >.Add( K item ) => throw (new NotSupportedException());
-            void ICollection< K >.Clear() => throw (new NotSupportedException());
-            bool ICollection< K >.Contains( K item ) => _Map.ContainsKey( item );
-            bool ICollection< K >.Remove( K item ) => throw (new NotSupportedException());
+            void ICollection< ByteListSegment >.Add( ByteListSegment item ) => throw (new NotSupportedException());
+            void ICollection< ByteListSegment >.Clear() => throw (new NotSupportedException());
+            bool ICollection< ByteListSegment >.Contains( ByteListSegment item ) => _Map.ContainsKey( item );
+            bool ICollection< ByteListSegment >.Remove( ByteListSegment item ) => throw (new NotSupportedException());
 
-            IEnumerator< K > IEnumerable< K >.GetEnumerator() => new Enumerator( _Map );
+            IEnumerator< ByteListSegment > IEnumerable< ByteListSegment >.GetEnumerator() => new Enumerator( _Map );
             IEnumerator IEnumerable.GetEnumerator() => new Enumerator( _Map );
 
             void ICollection.CopyTo( Array array, int index )
@@ -229,7 +449,7 @@ namespace System.Collections.Generic
                 if ( index < 0 || index > array.Length ) throw (new ArgumentOutOfRangeException());
                 if ( array.Length - index < _Map.Count ) throw (new ArgumentException( "Arg_ArrayPlusOffTooSmall" ));
                 
-                if ( array is K[] array2 )
+                if ( array is ByteListSegment[] array2 )
                 {
                     CopyTo( array2, index );
                     return;
@@ -262,7 +482,7 @@ namespace System.Collections.Generic
             /// </summary>
             public struct Enumerator : IEnumerator< T >, IDisposable, IEnumerator
             {
-                private Map< K, T > _Map;
+                private Map_ByteListSegment< T > _Map;
                 private int _Index;
                 private T _CurrentValue;
 
@@ -277,7 +497,7 @@ namespace System.Collections.Generic
                     }
                 }
 
-                internal Enumerator( Map< K, T > dictionary )
+                internal Enumerator( Map_ByteListSegment< T > dictionary )
                 {
                     _Map = dictionary;
                     _Index = 0;
@@ -308,13 +528,13 @@ namespace System.Collections.Generic
                 }
             }
 
-            private Map< K, T > _Map;
+            private Map_ByteListSegment< T > _Map;
             public int Count => _Map.Count;
             bool ICollection< T >.IsReadOnly => true;
             bool ICollection.IsSynchronized => false;
             object ICollection.SyncRoot => ((ICollection) _Map).SyncRoot;
 
-            public ValueCollection( Map< K, T > dictionary ) => _Map = dictionary ?? throw (new ArgumentNullException());
+            public ValueCollection( Map_ByteListSegment< T > dictionary ) => _Map = dictionary ?? throw (new ArgumentNullException());
             public Enumerator GetEnumerator() => new Enumerator( _Map );
 
             public void CopyTo( T[] array, int index )
@@ -378,21 +598,17 @@ namespace System.Collections.Generic
         private int _FreeList;
         private int _FreeCount;
 
-        private IEqualityComparerByRef< K > _Comparer;
         private KeyCollection   _Keys;
         private ValueCollection _Values;
         private object _SyncRoot;
 
-        public Map( IEqualityComparerByRef< K > comparer ): this( 0, comparer ) { }
-        public Map( int capacity, IEqualityComparerByRef< K > comparer )
+        public Map_ByteListSegment(): this( 0 ) { }
+        public Map_ByteListSegment( int capacity )
         {
             if ( capacity < 0 ) throw (new ArgumentOutOfRangeException( nameof(capacity) ));
-            _Comparer = comparer ?? throw (new ArgumentNullException( nameof(comparer) ));
-
             Init( capacity );            
         }
-        public Map( IDictionary< K, T > dictionary ): this( dictionary, null ) { }
-        public Map( IDictionary< K, T > dictionary, IEqualityComparerByRef< K > comparer ) : this( dictionary?.Count ?? 0, comparer )
+        public Map_ByteListSegment( IDictionary< ByteListSegment, T > dictionary ) : this( dictionary?.Count ?? 0 )
         {
             if ( dictionary == null ) throw (new ArgumentNullException());
 
@@ -410,7 +626,6 @@ namespace System.Collections.Generic
             _FreeList = -1;
         }
 
-        public IEqualityComparerByRef< K > Comparer => _Comparer;
         public int Count => (_Count - _FreeCount);
         public KeyCollection Keys
         {
@@ -420,8 +635,8 @@ namespace System.Collections.Generic
                 return (_Keys);
             }
         }
-        ICollection< K > IDictionary< K, T >.Keys => this.Keys;
-        IEnumerable< K > IReadOnlyDictionary< K, T >.Keys => this.Keys;
+        ICollection< ByteListSegment > IDictionary< ByteListSegment, T >.Keys => this.Keys;
+        IEnumerable< ByteListSegment > IReadOnlyDictionary< ByteListSegment, T >.Keys => this.Keys;
 
         public ValueCollection Values
         {
@@ -431,10 +646,20 @@ namespace System.Collections.Generic
                 return (_Values);
             }
         }
-        ICollection< T > IDictionary< K, T >.Values => this.Values;
-        IEnumerable< T > IReadOnlyDictionary< K, T >.Values => this.Values;
+        ICollection< T > IDictionary< ByteListSegment, T >.Values => this.Values;
+        IEnumerable< T > IReadOnlyDictionary< ByteListSegment, T >.Values => this.Values;
 
-        public T this[ K key ]
+        public T this[ in ByteListSegment key ]
+        {
+            get
+            {
+                if ( TryGetValue( key, out var value ) ) return (value);
+
+                throw (new KeyNotFoundException());
+            }
+            set => Insert( key, value, add: false );
+        }
+        public T this[ ByteListSegment key ]
         {
             get
             {
@@ -461,11 +686,12 @@ namespace System.Collections.Generic
             set
             {
                 if ( key == null ) throw (new ArgumentNullException( "key" ));
-                this[ (K) key ] = (T) value;
+                var kkey = ((ByteListSegment) key);
+                this[ in kkey ] = (T) value;
             }
         }
 
-        bool ICollection< KeyValuePair< K, T > >.IsReadOnly => false;
+        bool ICollection< KeyValuePair< ByteListSegment, T > >.IsReadOnly => false;
         bool ICollection.IsSynchronized => false;
         object ICollection.SyncRoot
         {
@@ -480,13 +706,13 @@ namespace System.Collections.Generic
         ICollection IDictionary.Keys => this.Keys;
         ICollection IDictionary.Values => this.Values;
 
-        void ICollection< KeyValuePair< K, T > >.Add( KeyValuePair< K, T > p ) => Add( p.Key, p.Value );
-        bool ICollection< KeyValuePair< K, T > >.Contains( KeyValuePair< K, T > p )
+        void ICollection< KeyValuePair< ByteListSegment, T > >.Add( KeyValuePair< ByteListSegment, T > p ) => Add( p.Key, p.Value );
+        bool ICollection< KeyValuePair< ByteListSegment, T > >.Contains( KeyValuePair< ByteListSegment, T > p )
         {
             var i = FindEntry( p.Key );
             return ((0 <= i) && EqualityComparer< T >.Default.Equals( _Entries[ i ].Value, p.Value ));
         }
-        bool ICollection< KeyValuePair< K, T > >.Remove( KeyValuePair< K, T > p )
+        bool ICollection< KeyValuePair< ByteListSegment, T > >.Remove( KeyValuePair< ByteListSegment, T > p )
         {
             var i = FindEntry( p.Key );
             if ( (0 <= i) && EqualityComparer< T >.Default.Equals( _Entries[ i ].Value, p.Value ) )
@@ -497,7 +723,7 @@ namespace System.Collections.Generic
             return (false);
         }
 
-        void IDictionary.Add( object key, object value ) => Add( (K) key, (T) value );
+        void IDictionary.Add( object key, object value ) => Add( (ByteListSegment) key, (T) value );
         bool IDictionary.Contains( object key ) => IsCompatibleKey( key, out var kkey ) && ContainsKey( kkey );
         void IDictionary.Remove( object key )
         {
@@ -509,17 +735,17 @@ namespace System.Collections.Generic
 
         IDictionaryEnumerator IDictionary.GetEnumerator() => new Enumerator( this, Enumerator.DictEntry );
         public Enumerator GetEnumerator() => new Enumerator( this, Enumerator.KeyValuePair );
-        IEnumerator< KeyValuePair< K, T > > IEnumerable< KeyValuePair< K, T > >.GetEnumerator() => new Enumerator( this, Enumerator.KeyValuePair );
+        IEnumerator< KeyValuePair< ByteListSegment, T > > IEnumerable< KeyValuePair< ByteListSegment, T > >.GetEnumerator() => new Enumerator( this, Enumerator.KeyValuePair );
         IEnumerator IEnumerable.GetEnumerator() => new Enumerator( this, Enumerator.KeyValuePair );
 
-        public bool TryAdd( in K key, T value )
+        public bool TryAdd( in ByteListSegment key, T value )
         {
             var hash   = InternalGetHashCode( key );
             var bucket = hash % _Buckets.Length;
             for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
             {
                 ref readonly var slot = ref _Entries[ i ];
-                if ( (slot.HashCode == hash) && _Comparer.Equals( slot.Key, key ) )
+                if ( (slot.HashCode == hash) && HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key.AsSpan() ) )
                 {
                     return (false);
                 }
@@ -554,7 +780,7 @@ namespace System.Collections.Generic
 
             return (true);
         }
-        [M(O.AggressiveInlining)] public bool TryAdd( in K key, T value, out T existsValue )
+        [M(O.AggressiveInlining)] public bool TryAdd( in ByteListSegment key, T value, out T existsValue )
         {
             #region [.try find exists.]
             var hash   = InternalGetHashCode( key );
@@ -562,7 +788,7 @@ namespace System.Collections.Generic
             for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
             {
                 ref readonly var slot = ref _Entries[ i ];
-                if ( (slot.HashCode == hash) && _Comparer.Equals( slot.Key, key ) )
+                if ( (slot.HashCode == hash) && HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key.AsSpan() ) )
                 {
                     existsValue = slot.Value;
                     return (false);
@@ -603,7 +829,7 @@ namespace System.Collections.Generic
             return (true);
             #endregion
         }
-        [M(O.AggressiveInlining)] public void AddOrUpdate( in K key, T value )
+        [M(O.AggressiveInlining)] public void AddOrUpdate( in ByteListSegment key, T value )
         {
             #region [.try find exists.]
             var hash   = InternalGetHashCode( key );
@@ -611,7 +837,7 @@ namespace System.Collections.Generic
             for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
             {
                 ref var slot = ref _Entries[ i ];
-                if ( (slot.HashCode == hash) && _Comparer.Equals( slot.Key, key ) )
+                if ( (slot.HashCode == hash) && HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key.AsSpan() ) )
                 {
                     slot.Value = value;
                     return;
@@ -649,7 +875,7 @@ namespace System.Collections.Generic
             //_Count++;
             #endregion
         }
-        [M(O.AggressiveInlining)] public bool TryUpdate( in K key, T value )
+        [M(O.AggressiveInlining)] public bool TryUpdate( in ByteListSegment key, T value )
         {
             #region [.try find exists.]
             var hash   = InternalGetHashCode( key );
@@ -657,7 +883,7 @@ namespace System.Collections.Generic
             for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
             {
                 ref var slot = ref _Entries[ i ];
-                if ( (slot.HashCode == hash) && _Comparer.Equals( slot.Key, key ) )
+                if ( (slot.HashCode == hash) && HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key.AsSpan() ) )
                 {
                     slot.Value = value;
                     return (true);
@@ -668,7 +894,7 @@ namespace System.Collections.Generic
             #endregion  
         }
 
-        public void Add( in K key, T value ) => Insert( key, value, add: true );
+        public void Add( in ByteListSegment key, T value ) => Insert( key, value, add: true );
         public void Clear()
         {
             if ( 0 < _Count )
@@ -680,7 +906,7 @@ namespace System.Collections.Generic
                 _FreeCount = 0;
             }
         }
-        public bool ContainsKey( in K key ) => (0 <= FindEntry( key ));
+        public bool ContainsKey( in ByteListSegment key ) => (0 <= FindEntry( key ));
         public bool ContainsValue( T value )
         {
             if ( value == null )
@@ -709,14 +935,14 @@ namespace System.Collections.Generic
             return (false);
         }
 
-        private int FindEntry( in K key )
+        [M(O.AggressiveInlining)] private int FindEntry( in ByteListSegment key )
         {
             var hash   = InternalGetHashCode( key );
             var bucket = hash % _Buckets.Length;
             for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
             {
                 ref readonly var slot = ref _Entries[ i ];
-                if ( (slot.HashCode == hash) && _Comparer.Equals( slot.Key, key ) )
+                if ( (slot.HashCode == hash) && HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key.AsSpan() ) )
                 {
                     return (i);
                 }
@@ -724,14 +950,14 @@ namespace System.Collections.Generic
             }
             return (-1);
         }
-        private void Insert( in K key, T value, bool add )
+        [M(O.AggressiveInlining)] private void Insert( in ByteListSegment key, T value, bool add )
         {
             var hash   = InternalGetHashCode( key );
             var bucket = hash % _Buckets.Length;
             for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
             {
                 ref var slot = ref _Entries[ i ];   
-                if ( (slot.HashCode == hash) && _Comparer.Equals( slot.Key, key ) )
+                if ( (slot.HashCode == hash) && HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key.AsSpan() ) )
                 {
                     if ( add ) throw (new ArgumentException( "Adding Duplicate" ));
 
@@ -790,7 +1016,7 @@ namespace System.Collections.Generic
             _Entries = newEntries;
         }
 
-        public bool Remove( in K key )
+        public bool Remove( in ByteListSegment key )
         {
             var hash   = InternalGetHashCode( key );
             var bucket = hash % _Buckets.Length;
@@ -798,7 +1024,7 @@ namespace System.Collections.Generic
             for ( var i = _Buckets[ bucket ]; 0 <= i; /*i = _Entries[ i ].Next*/ )
             {
                 ref var slot = ref _Entries[ i ];
-                if ( (slot.HashCode == hash) && _Comparer.Equals( slot.Key, key ) )
+                if ( (slot.HashCode == hash) && HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key.AsSpan() ) )
                 {
                     if ( last < 0 )
                     {
@@ -825,7 +1051,7 @@ namespace System.Collections.Generic
 
             return (false);
         }
-        public bool TryGetValue( in K key, out T value )
+        public bool TryGetValue( in ByteListSegment key, out T value )
         {
             #region [.try find exists.]
             var hash   = InternalGetHashCode( key );
@@ -833,7 +1059,7 @@ namespace System.Collections.Generic
             for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
             {
                 ref var slot = ref _Entries[ i ];
-                if ( (slot.HashCode == hash) && _Comparer.Equals( slot.Key, key ) )
+                if ( (slot.HashCode == hash) && HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key.AsSpan() ) )
                 {
                     value = slot.Value;
                     return (true);
@@ -846,7 +1072,7 @@ namespace System.Collections.Generic
             #endregion 
         }
 
-        public ref T GetValueRefOrAddDefault( in K key, out bool exists )
+        public ref T GetValueRefOrAddDefault( in ByteListSegment key, out bool exists )
         {
             #region [.try find exists.]
             var hash   = InternalGetHashCode( key );
@@ -855,12 +1081,12 @@ namespace System.Collections.Generic
             {
                 ref var slot = ref _Entries[ i ];
 #if DEBUG
-                //if ( (slot.HashCode == hash) && !_Comparer.Equals( slot.Key, key ) )
+                //if ( (slot.HashCode == hash) && !HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key.AsSpan() ) )
                 //{
                 //    Console.WriteLine( "\r\n XZ \r\n" );
                 //}
 #endif   
-                if ( (slot.HashCode == hash) && _Comparer.Equals( slot.Key, key ) )
+                if ( (slot.HashCode == hash) && HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key.AsSpan() ) )
                 {
                     exists = true;
                     return ref slot.Value;
@@ -901,7 +1127,7 @@ namespace System.Collections.Generic
             return ref _Entries[ index ].Value;
             #endregion
         }
-        public ref T GetValueRefOrAddDefault( in K key, Func< K, K > getNewKeyFunc, out bool exists )
+        public ref T GetValueRefOrAddDefault( in ByteListSegment key, GenNewKeyDelegate getNewKeyFunc, out bool exists )
         {
             #region [.try find exists.]
             var hash   = InternalGetHashCode( key );
@@ -909,11 +1135,11 @@ namespace System.Collections.Generic
             for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
             {
                 ref var slot = ref _Entries[ i ];
-                //if ( (slot.HashCode == hash) && !_Comparer.Equals( slot.Key, key ) )
+                //if ( (slot.HashCode == hash) && !HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key.AsSpan() ) )
                 //{
                 //    Console.WriteLine( "XZ" );
                 //}
-                if ( (slot.HashCode == hash) && _Comparer.Equals( slot.Key, key ) )
+                if ( (slot.HashCode == hash) && HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key.AsSpan() ) )
                 {
                     exists = true;
                     return ref slot.Value;
@@ -954,7 +1180,7 @@ namespace System.Collections.Generic
             return ref _Entries[ index ].Value;
             #endregion
         }
-        public ref T GetValueRefOrAddDefault( in K key, Func< K, K > getNewKeyFunc )
+        public ref T GetValueRefOrAddDefault( in ByteListSegment key, GenNewKeyDelegate getNewKeyFunc )
         {
             #region [.try find exists.]
             var hash   = InternalGetHashCode( key );
@@ -963,13 +1189,13 @@ namespace System.Collections.Generic
             {
                 ref var slot = ref _Entries[ i ];
 #if DEBUG
-                if ( (slot.HashCode == hash) && !_Comparer.Equals( slot.Key, key ) )
+                if ( (slot.HashCode == hash) && !HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key.AsSpan() ) )
                 {
                     if ( Debugger.IsAttached ) Debugger.Break();
                     else Console.WriteLine( $"hash={hash}, slot.Key={slot.Key}, key={key}" );
                 }
 #endif
-                if ( (slot.HashCode == hash) && _Comparer.Equals( slot.Key, key ) )
+                if ( (slot.HashCode == hash) && HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key.AsSpan() ) )
                 {
                     return ref slot.Value;
                 }
@@ -1009,7 +1235,7 @@ namespace System.Collections.Generic
             #endregion
         }
 
-        private void CopyTo( KeyValuePair< K, T >[] array, int index )
+        private void CopyTo( KeyValuePair< ByteListSegment, T >[] array, int index )
         {
             if ( array == null )                     throw (new ArgumentNullException( "array" ));
             if ( index < 0 || index > array.Length ) throw (new ArgumentOutOfRangeException());
@@ -1020,11 +1246,11 @@ namespace System.Collections.Generic
                 ref readonly var slot = ref _Entries[ i ];
                 if ( 0 <= slot.HashCode )
                 {
-                    array[ index++ ] = new KeyValuePair< K, T >( slot.Key, slot.Value );
+                    array[ index++ ] = new KeyValuePair< ByteListSegment, T >( slot.Key, slot.Value );
                 }
             }
         }
-        void ICollection< KeyValuePair< K, T > >.CopyTo( KeyValuePair< K, T >[] array, int index ) => CopyTo( array, index );
+        void ICollection< KeyValuePair< ByteListSegment, T > >.CopyTo( KeyValuePair< ByteListSegment, T >[] array, int index ) => CopyTo( array, index );
         void ICollection.CopyTo( Array array, int index )
         {
             if ( array == null )                     throw (new ArgumentNullException( "array" ));
@@ -1033,7 +1259,7 @@ namespace System.Collections.Generic
             if ( index < 0 || index > array.Length ) throw (new ArgumentOutOfRangeException());
             if ( array.Length - index < Count )      throw (new ArgumentException( "Arg_ArrayPlusOffTooSmall" ));
             
-            if ( array is KeyValuePair< K, T >[] array2 )
+            if ( array is KeyValuePair< ByteListSegment, T >[] array2 )
             {
                 CopyTo( array2, index );
             }
@@ -1055,7 +1281,7 @@ namespace System.Collections.Generic
                     ref readonly var slot = ref _Entries[ i ];
                     if ( 0 <= slot.HashCode )
                     {
-                        array5[ index++ ] = new KeyValuePair< K, T >( slot.Key, slot.Value );
+                        array5[ index++ ] = new KeyValuePair< ByteListSegment, T >( slot.Key, slot.Value );
                     }
                 }
             }
@@ -1064,11 +1290,11 @@ namespace System.Collections.Generic
                 throw (new ArgumentException( "Argument_InvalidArrayType" ));
             }            
         }
-        
-        [M(O.AggressiveInlining)] private int InternalGetHashCode( in K key ) => _Comparer.GetHashCode( key ) & 0x7FFFFFFF;
-        [M(O.AggressiveInlining)] private static bool IsCompatibleKey( object key, out K kkey )
+
+        [M( O.AggressiveInlining )] private int InternalGetHashCode( in ByteListSegment key ) => HashHelper.Calc( key.AsSpan() ) & 0x7FFFFFFF;//key.GetHashCode() & 0x7FFFFFFF;
+        [M(O.AggressiveInlining)] private static bool IsCompatibleKey( object key, out ByteListSegment kkey )
         {
-            if ( key is K k )
+            if ( key is ByteListSegment k )
             {
                 kkey = k;
                 return (true);
@@ -1077,9 +1303,9 @@ namespace System.Collections.Generic
             return (false);
         }
 
-        public void Add( K key, T value ) => Add( in key, value );
-        public bool ContainsKey( K key ) => ContainsKey( in key );
-        public bool Remove( K key ) => Remove( in key );
-        public bool TryGetValue( K key, out T value ) => TryGetValue( in key, out value );
+        public void Add( ByteListSegment key, T value ) => Add( in key, value );
+        public bool ContainsKey( ByteListSegment key ) => ContainsKey( in key );
+        public bool Remove( ByteListSegment key ) => Remove( in key );
+        public bool TryGetValue( ByteListSegment key, out T value ) => TryGetValue( in key, out value );
     }
 }

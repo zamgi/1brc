@@ -51,6 +51,7 @@ namespace _1brc
                 sw.Restart();
                 var suc = GC.TryStartNoGCRegion( int.MaxValue );
                 var map = FileProcessor_LR.Process_v2( fn, chunkCount: Environment.ProcessorCount, innerBufferCapacity );
+                //---var map = FileProcessor_LR.Process_v3( fn, chunkCount: Environment.ProcessorCount, innerBufferCapacity );
                 //---var map = FileProcessor_LR.Process_v2_Plus( fn, chunkCount: Environment.ProcessorCount, innerBufferCapacity );
                 try { if ( suc ) GC.EndNoGCRegion(); } catch {; }
                 sw.Stop();
@@ -72,6 +73,33 @@ namespace _1brc
         }
 
         private static void Print2Console( this IDictionary< ListSegment< byte >, SummaryDouble > map )
+        {
+            long   count = 0;
+#if (DEBUG || CALC_SUM2)
+            long   sum2  = 0;
+#endif
+            //var  line  = 0;
+            //Console.Write( '{' );
+            var query = map;//.Select( x => (Name: x.Key.ToString(), Summary: x.Value) ).OrderBy( x => x.Name, StringComparer.InvariantCulture );
+            foreach ( var (Name, Summary) in query )
+            {
+                count += Summary.Count;
+#if (DEBUG || CALC_SUM2)
+                sum2 += Summary.Sum2;
+#endif
+                //Console.WriteLine( $"{Name} = {Summary}" );
+                //if ( ++line < map.Count ) Console.Write( ", " );
+            }
+
+            //Console.WriteLine( '}' );
+            //Console.WriteLine();
+            Console.WriteLine( $"Total row count: {count:#,#}"
+#if (DEBUG || CALC_SUM2)
+                + $", (avg={1.0 * sum2 / count})"
+#endif
+                );
+        }
+        private static void Print2Console( this IDictionary< ByteListSegment, SummaryDouble > map )
         {
             long   count = 0;
 #if (DEBUG || CALC_SUM2)
