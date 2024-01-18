@@ -962,10 +962,13 @@ namespace System.Collections.Generic
             for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
             {
                 ref var slot = ref _Entries[ i ];
-                //if ( (slot.HashCode == hash) && !_Comparer.Equals( slot.Key, key ) )
-                //{
-                //    Console.WriteLine( "XZ" );
-                //}
+#if DEBUG
+                if ( (slot.HashCode == hash) && !_Comparer.Equals( slot.Key, key ) )
+                {
+                    if ( Debugger.IsAttached ) Debugger.Break();
+                    else Console.WriteLine( $"hash={hash}, slot.Key={slot.Key}, key={key}" );
+                }
+#endif
                 if ( (slot.HashCode == hash) && _Comparer.Equals( slot.Key, key ) )
                 {
                     return ref slot.Value;
