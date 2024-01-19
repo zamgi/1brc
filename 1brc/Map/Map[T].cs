@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Threading;
 
@@ -408,6 +409,8 @@ namespace System.Collections.Generic
             Array.Fill( _Buckets, -1 );
             _Entries = new Entry[ prime ];
             _FreeList = -1;
+
+            _FastModMultiplier = GetFastModMultiplier( (uint) _Buckets.Length );
         }
 
         public IEqualityComparerByRef< K > Comparer => _Comparer;
@@ -788,6 +791,8 @@ namespace System.Collections.Generic
             }
             _Buckets = newBuckets;
             _Entries = newEntries;
+
+            _FastModMultiplier = GetFastModMultiplier( (uint) _Buckets.Length );
         }
 
         public bool Remove( in K key )
@@ -888,7 +893,8 @@ namespace System.Collections.Generic
                 _Count++;
             }
 
-            _Entries[ index ] = new Entry() 
+            ref var eslot = ref _Entries[ index ];
+            eslot = new Entry() 
             {
                 HashCode = hash,
                 Value    = default,
@@ -898,67 +904,31 @@ namespace System.Collections.Generic
             _Buckets[ bucket ] = index;
 
             exists = false;
-            return ref _Entries[ index ].Value;
+            return ref eslot.Value;
             #endregion
         }
-        public ref T GetValueRefOrAddDefault( in K key, Func< K, K > getNewKeyFunc, out bool exists )
+
+        [M(O.AggressiveInlining)] private static ulong GetFastModMultiplier( uint divisor ) => (ulong.MaxValue / divisor) + 1;
+        [M(O.AggressiveInlining)] private static uint FastMod( uint value, uint divisor, ulong multiplier )
         {
-            #region [.try find exists.]
-            var hash   = InternalGetHashCode( key );
-            var bucket = hash % _Buckets.Length;
-            for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
-            {
-                ref var slot = ref _Entries[ i ];
-                //if ( (slot.HashCode == hash) && !_Comparer.Equals( slot.Key, key ) )
-                //{
-                //    Console.WriteLine( "XZ" );
-                //}
-                if ( (slot.HashCode == hash) && _Comparer.Equals( slot.Key, key ) )
-                {
-                    exists = true;
-                    return ref slot.Value;
-                }
-                i = slot.Next;
-            }
-            #endregion
-
-            #region [.add new.]
-            int index;
-            if ( 0 <= _FreeList )
-            {
-                index = _FreeList;
-                ref readonly var slot = ref _Entries[ index ];
-                _FreeList = slot.Next;
-            }
-            else
-            {
-                if ( _Count == _Entries.Length )
-                {
-                    Resize();
-                    bucket = hash % _Buckets.Length;
-                }
-                index = _Count;
-                _Count++;
-            }
-
-            _Entries[ index ] = new Entry() 
-            {
-                HashCode = hash,
-                Value    = default,
-                Key      = getNewKeyFunc( key ),
-                Next     = _Buckets[ bucket ],
-            };
-            _Buckets[ bucket ] = index;
-
-            exists = false;
-            return ref _Entries[ index ].Value;
-            #endregion
+            Debug.Assert( divisor <= int.MaxValue );
+            uint highbits = (uint) ( ( ( ((multiplier * value) >> 32) + 1) * divisor) >> 32);
+            Debug.Assert( highbits == (value % divisor) );
+            return (highbits);
         }
+
+        private ulong _FastModMultiplier;
         public ref T GetValueRefOrAddDefault( in K key, Func< K, K > getNewKeyFunc )
         {
             #region [.try find exists.]
             var hash   = InternalGetHashCode( key );
             var bucket = hash % _Buckets.Length;
+            
+//            var fastModBucket = FastMod( (uint) hash, (uint) _Buckets.Length, _FastModMultiplier );
+//            var bucket        = (int) fastModBucket;
+//#if DEBUG
+//            Debug.Assert( bucket == (hash % _Buckets.Length) ); 
+//#endif
             for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
             {
                 ref var slot = ref _Entries[ i ];
@@ -996,7 +966,8 @@ namespace System.Collections.Generic
                 _Count++;
             }
 
-            _Entries[ index ] = new Entry() 
+            ref var eslot = ref _Entries[ index ];
+            eslot = new Entry() 
             {
                 HashCode = hash,
                 Value    = default,
@@ -1005,7 +976,7 @@ namespace System.Collections.Generic
             };
             _Buckets[ bucket ] = index;
 
-            return ref _Entries[ index ].Value;
+            return ref eslot.Value;
             #endregion
         }
 

@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
 using System.Text;
 using System.Threading;
 
@@ -244,11 +245,6 @@ namespace _1brc
     /// <summary>
     /// 
     /// </summary>
-    internal delegate ByteListSegment GenNewKeyDelegate( in ByteListSegment key );
-
-    /// <summary>
-    /// 
-    /// </summary>
     [DebuggerTypeProxy(typeof(MapDebugView<,>))]
     [DebuggerDisplay("Count = {Count}")]
     internal sealed class Map_ByteListSegment< T > : IDictionary< ByteListSegment, T >, ICollection< KeyValuePair< ByteListSegment, T > >, IReadOnlyDictionary< ByteListSegment, T >, IReadOnlyCollection< KeyValuePair< ByteListSegment, T > >, ICollection, IDictionary
@@ -258,10 +254,10 @@ namespace _1brc
         /// </summary>
         private struct Entry
         {
-            public int HashCode;
-            public int Next;
+            public long HashCode;
+            public int  Next;
             public ByteListSegment Key;
-            public T   Value;
+            public T    Value;
         }
 
         /// <summary>
@@ -624,6 +620,8 @@ namespace _1brc
             Array.Fill( _Buckets, -1 );
             _Entries = new Entry[ prime ];
             _FreeList = -1;
+
+            _FastModMultiplier = GetFastModMultiplier( (uint) _Buckets.Length );
         }
 
         public int Count => (_Count - _FreeCount);
@@ -741,7 +739,7 @@ namespace _1brc
         public bool TryAdd( in ByteListSegment key, T value )
         {
             var hash   = InternalGetHashCode( key );
-            var bucket = hash % _Buckets.Length;
+            var bucket = GetBucket( hash );
             for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
             {
                 ref readonly var slot = ref _Entries[ i ];
@@ -764,7 +762,7 @@ namespace _1brc
                 if ( _Count == _Entries.Length )
                 {
                     Resize();
-                    bucket = hash % _Buckets.Length;
+                    bucket = GetBucket( hash );
                 }
                 index = _Count;
                 _Count++;
@@ -784,7 +782,7 @@ namespace _1brc
         {
             #region [.try find exists.]
             var hash   = InternalGetHashCode( key );
-            var bucket = hash % _Buckets.Length;
+            var bucket = GetBucket( hash );
             for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
             {
                 ref readonly var slot = ref _Entries[ i ];
@@ -810,7 +808,7 @@ namespace _1brc
                 if ( _Count == _Entries.Length )
                 {
                     Resize();
-                    bucket = hash % _Buckets.Length;
+                    bucket = GetBucket( hash );
                 }
                 index = _Count;
                 _Count++;
@@ -833,7 +831,7 @@ namespace _1brc
         {
             #region [.try find exists.]
             var hash   = InternalGetHashCode( key );
-            var bucket = hash % _Buckets.Length;
+            var bucket = GetBucket( hash );
             for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
             {
                 ref var slot = ref _Entries[ i ];
@@ -859,7 +857,7 @@ namespace _1brc
                 if ( _Count == _Entries.Length )
                 {
                     Resize();
-                    bucket = hash % _Buckets.Length;
+                    bucket = GetBucket( hash );
                 }
                 index = _Count;
                 _Count++;
@@ -879,7 +877,7 @@ namespace _1brc
         {
             #region [.try find exists.]
             var hash   = InternalGetHashCode( key );
-            var bucket = hash % _Buckets.Length;
+            var bucket = GetBucket( hash );
             for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
             {
                 ref var slot = ref _Entries[ i ];
@@ -938,7 +936,7 @@ namespace _1brc
         [M(O.AggressiveInlining)] private int FindEntry( in ByteListSegment key )
         {
             var hash   = InternalGetHashCode( key );
-            var bucket = hash % _Buckets.Length;
+            var bucket = GetBucket( hash );
             for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
             {
                 ref readonly var slot = ref _Entries[ i ];
@@ -953,7 +951,7 @@ namespace _1brc
         [M(O.AggressiveInlining)] private void Insert( in ByteListSegment key, T value, bool add )
         {
             var hash   = InternalGetHashCode( key );
-            var bucket = hash % _Buckets.Length;
+            var bucket = GetBucket( hash );
             for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
             {
                 ref var slot = ref _Entries[ i ];   
@@ -979,7 +977,7 @@ namespace _1brc
                 if ( _Count == _Entries.Length )
                 {
                     Resize();
-                    bucket = hash % _Buckets.Length;
+                    bucket = GetBucket( hash );
                 }
                 index = _Count;
                 _Count++;
@@ -1014,12 +1012,14 @@ namespace _1brc
             }
             _Buckets = newBuckets;
             _Entries = newEntries;
+
+            _FastModMultiplier = GetFastModMultiplier( (uint) _Buckets.Length );
         }
 
         public bool Remove( in ByteListSegment key )
         {
             var hash   = InternalGetHashCode( key );
-            var bucket = hash % _Buckets.Length;
+            var bucket = GetBucket( hash );
             var last   = -1;
             for ( var i = _Buckets[ bucket ]; 0 <= i; /*i = _Entries[ i ].Next*/ )
             {
@@ -1055,7 +1055,7 @@ namespace _1brc
         {
             #region [.try find exists.]
             var hash   = InternalGetHashCode( key );
-            var bucket = hash % _Buckets.Length;
+            var bucket = GetBucket( hash );
             for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
             {
                 ref var slot = ref _Entries[ i ];
@@ -1075,8 +1075,9 @@ namespace _1brc
         public ref T GetValueRefOrAddDefault( in ByteListSegment key, out bool exists )
         {
             #region [.try find exists.]
-            var hash   = InternalGetHashCode( key );
-            var bucket = hash % _Buckets.Length;
+            var key_span = key.AsSpan();
+            var hash   = InternalGetHashCode( key_span );
+            var bucket = GetBucket( hash );
             for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
             {
                 ref var slot = ref _Entries[ i ];
@@ -1086,7 +1087,7 @@ namespace _1brc
                 //    Console.WriteLine( "\r\n XZ \r\n" );
                 //}
 #endif   
-                if ( (slot.HashCode == hash) && HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key.AsSpan() ) )
+                if ( (slot.HashCode == hash) && HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key_span ) )
                 {
                     exists = true;
                     return ref slot.Value;
@@ -1108,13 +1109,14 @@ namespace _1brc
                 if ( _Count == _Entries.Length )
                 {
                     Resize();
-                    bucket = hash % _Buckets.Length;
+                    bucket = GetBucket( hash );
                 }
                 index = _Count;
                 _Count++;
             }
 
-            _Entries[ index ] = new Entry() 
+            ref var eslot = ref _Entries[ index ];
+            eslot = new Entry() 
             {
                 HashCode = hash,
                 Value    = default,
@@ -1124,78 +1126,49 @@ namespace _1brc
             _Buckets[ bucket ] = index;
 
             exists = false;
-            return ref _Entries[ index ].Value;
+            return ref eslot.Value;
             #endregion
         }
-        public ref T GetValueRefOrAddDefault( in ByteListSegment key, GenNewKeyDelegate getNewKeyFunc, out bool exists )
+
+        [M(O.AggressiveInlining)] private static ulong GetFastModMultiplier( uint divisor ) => (ulong.MaxValue / divisor) + 1;
+        [M(O.AggressiveInlining)] private static uint FastMod( uint value, uint divisor, ulong multiplier )
         {
-            #region [.try find exists.]
-            var hash   = InternalGetHashCode( key );
-            var bucket = hash % _Buckets.Length;
-            for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
-            {
-                ref var slot = ref _Entries[ i ];
-                //if ( (slot.HashCode == hash) && !HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key.AsSpan() ) )
-                //{
-                //    Console.WriteLine( "XZ" );
-                //}
-                if ( (slot.HashCode == hash) && HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key.AsSpan() ) )
-                {
-                    exists = true;
-                    return ref slot.Value;
-                }
-                i = slot.Next;
-            }
-            #endregion
-
-            #region [.add new.]
-            int index;
-            if ( 0 <= _FreeList )
-            {
-                index = _FreeList;
-                ref readonly var slot = ref _Entries[ index ];
-                _FreeList = slot.Next;
-            }
-            else
-            {
-                if ( _Count == _Entries.Length )
-                {
-                    Resize();
-                    bucket = hash % _Buckets.Length;
-                }
-                index = _Count;
-                _Count++;
-            }
-
-            _Entries[ index ] = new Entry() 
-            {
-                HashCode = hash,
-                Value    = default,
-                Key      = getNewKeyFunc( key ),
-                Next     = _Buckets[ bucket ],
-            };
-            _Buckets[ bucket ] = index;
-
-            exists = false;
-            return ref _Entries[ index ].Value;
-            #endregion
+            Debug.Assert( divisor <= int.MaxValue );
+            uint highbits = (uint) ( ( ( ((multiplier * value) >> 32) + 1) * divisor) >> 32);
+            Debug.Assert( highbits == (value % divisor) );
+            return (highbits);
         }
-        public ref T GetValueRefOrAddDefault( in ByteListSegment key, GenNewKeyDelegate getNewKeyFunc )
+        //[M(O.AggressiveInlining)] private static uint FastMod( ulong value, uint divisor, ulong multiplier )
+        //{
+        //    Debug.Assert( divisor <= int.MaxValue );
+        //    uint highbits = (uint) ( ( ( ((multiplier * value) >> 32) + 1) * divisor) >> 32);
+        //    Debug.Assert( highbits == (value % divisor) );
+        //    return (highbits);
+        //}
+
+        private ulong _FastModMultiplier;
+        public ref T GetValueRefOrAddDefault( in ByteListSegment key )
         {
             #region [.try find exists.]
-            var hash   = InternalGetHashCode( key );
-            var bucket = hash % _Buckets.Length;
+            var key_span = key.AsSpan();
+            var hash   = InternalGetHashCode( key_span );
+            var bucket = GetBucket( hash );
+
+            //var x_hash = ((uint) hash) ^ ((uint) (hash >> 32)); 
+            //var fastModBucket = FastMod( x_hash, (uint) _Buckets.Length, _FastModMultiplier );
+            //Debug.Assert( fastModBucket == bucket );
+
             for ( var i = _Buckets[ bucket ]/* - 1*/; 0 <= i; /*i = _Entries[ i ].Next*/ )
             {
                 ref var slot = ref _Entries[ i ];
 #if DEBUG
-                if ( (slot.HashCode == hash) && !HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key.AsSpan() ) )
+                if ( (slot.HashCode == hash) && !HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key_span ) )
                 {
                     if ( Debugger.IsAttached ) Debugger.Break();
                     else Console.WriteLine( $"hash={hash}, slot.Key={slot.Key}, key={key}" );
                 }
 #endif
-                if ( (slot.HashCode == hash) && HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key.AsSpan() ) )
+                if ( (slot.HashCode == hash) && HashHelper.IsEqualByBytes( slot.Key.AsSpan(), key_span ) )
                 {
                     return ref slot.Value;
                 }
@@ -1216,22 +1189,23 @@ namespace _1brc
                 if ( _Count == _Entries.Length )
                 {
                     Resize();
-                    bucket = hash % _Buckets.Length;
+                    bucket = GetBucket( hash );
                 }
                 index = _Count;
                 _Count++;
             }
 
-            _Entries[ index ] = new Entry() 
+            ref var eslot = ref _Entries[ index ];
+            eslot = new Entry() 
             {
                 HashCode = hash,
                 Value    = default,
-                Key      = getNewKeyFunc( key ),
+                Key      = key.ToArray(),
                 Next     = _Buckets[ bucket ],
             };
             _Buckets[ bucket ] = index;
 
-            return ref _Entries[ index ].Value;
+            return ref eslot.Value;
             #endregion
         }
 
@@ -1291,7 +1265,9 @@ namespace _1brc
             }            
         }
 
-        [M( O.AggressiveInlining )] private int InternalGetHashCode( in ByteListSegment key ) => HashHelper.Calc( key.AsSpan() ) & 0x7FFFFFFF;//key.GetHashCode() & 0x7FFFFFFF;
+        [M(O.AggressiveInlining)] private int GetBucket( long hash ) => (int) (hash % _Buckets.Length);
+        [M(O.AggressiveInlining)] private static long InternalGetHashCode( in Span< byte > key_span ) => HashHelper.CalcLong( key_span ) & 0x7FFF_FFFF__FFFF_FFFF;//key.GetHashCode() & 0x7FFFFFFF;
+        [M(O.AggressiveInlining)] private static long InternalGetHashCode( in ByteListSegment key ) => HashHelper.CalcLong( key.AsSpan() ) & 0x7FFF_FFFF__FFFF_FFFF;//key.GetHashCode() & 0x7FFFFFFF;
         [M(O.AggressiveInlining)] private static bool IsCompatibleKey( object key, out ByteListSegment kkey )
         {
             if ( key is ByteListSegment k )

@@ -476,8 +476,6 @@ namespace _1brc
 
             public Map_ByteListSegment< SummaryDouble > Map => _Map;
 
-            private static GenNewKeyDelegate _CreateNewKeyFunc = new GenNewKeyDelegate( (in ByteListSegment key) => new ByteListSegment( key.ToArray() ) );
-
             void FileByteBufferReader.IReadBufferCallback.Callback( int readByteCount )
             {
                 var span = new Span< byte >( _ReadBuffer_BasePtr, readByteCount );
@@ -493,7 +491,7 @@ namespace _1brc
 
                     var suc = DoubleParser.TryParse_ByNewLine( val, out var d, out var endPos ); Debug.Assert( suc );
 
-                    ref var summary = ref _Map.GetValueRefOrAddDefault( name, _CreateNewKeyFunc );
+                    ref var summary = ref _Map.GetValueRefOrAddDefault( name );
                     summary.Apply( d );
 
                     startIdx += idx + endPos + 1;

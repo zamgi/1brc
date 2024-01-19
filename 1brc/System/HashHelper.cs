@@ -38,6 +38,8 @@ namespace System
 #if DEBUG
             var s = Encoding.UTF8.GetString( ptr, span.Length );
 #endif
+            [M(O.AggressiveInlining)] static byte get_hi_byte( byte* ptr, int byteOffset ) => *(byte*) Unsafe.Add< byte >( ptr, sizeof(int) + byteOffset );
+
             switch ( span.Length )
             {
                 case 0: return (0);
@@ -45,9 +47,9 @@ namespace System
                 case 2: return (*ptr++ | (*ptr++ << 8));
                 case 3: return (*ptr++ | (*ptr++ << 8) | (*ptr << 16));
                 case 4: return (*(int*) ptr);
-                case 5: return (*(int*) ptr ^ *(byte*) Unsafe.Add< byte >( ptr, sizeof(int) ));
-                case 6: return (*(int*) ptr ^ *(byte*) Unsafe.Add< byte >( ptr, sizeof(int) ) ^ *(byte*) Unsafe.Add< byte >( ptr, sizeof(int) + 1 ));
-                case 7: return (*(int*) ptr ^ *(byte*) Unsafe.Add< byte >( ptr, sizeof(int) ) ^ *(byte*) Unsafe.Add< byte >( ptr, sizeof(int) + 1 ) ^ *(byte*) Unsafe.Add< byte >( ptr, sizeof(int) + 2 ));
+                case 5: return (*(int*) ptr ^ get_hi_byte( ptr, 0 ));
+                case 6: return (*(int*) ptr ^ get_hi_byte( ptr, 0 ) ^ get_hi_byte( ptr, 1 ));
+                case 7: return (*(int*) ptr ^ get_hi_byte( ptr, 0 ) ^ get_hi_byte( ptr, 1 ) ^ get_hi_byte( ptr, 2 ));
                 case 8: return (*(int*) ptr ^ *(int*) Unsafe.Add< int >( ptr, 1 ));
 
                 default:
@@ -81,6 +83,83 @@ namespace System
             }
         }
 
+        [M(O.AggressiveInlining)] private static ulong QueueRoundLong( ulong hash, ulong queuedValue ) => BitOperations.RotateLeft( hash + queuedValue * Prime3, 17 ) * Prime4;
+        [M(O.AggressiveInlining)] private static ulong MixFinalLong( ulong hash )
+        {
+            hash ^= hash >> 15;
+            hash *= Prime2;
+            hash ^= hash >> 13;
+            hash *= Prime3;
+            hash ^= hash >> 16;
+            return (hash);
+        }
+        [M(O.AggressiveInlining)] public static long CalcLong< T >( in Span< T > span )
+        {
+            var ptr = (byte*) Unsafe.AsPointer( ref span.GetPinnableReference() );
+#if DEBUG
+            var s = Encoding.UTF8.GetString( ptr, span.Length );
+#endif
+            [M(O.AggressiveInlining)] static long get_hi( byte* ptr, int byteOffset ) => (((long) *(byte*) Unsafe.Add< byte >( ptr, sizeof(int) + byteOffset )) << (32 + 8 * byteOffset));
+
+            switch ( span.Length )
+            {
+                case 0: return (0);
+                case 1: return (*ptr);
+                case 2: return (*ptr++ | (*ptr++ << 8));
+                case 3: return (*ptr++ | (*ptr++ << 8) | (*ptr << 16));
+                case 4: return (*(int*) ptr);
+                case 5: return (*(uint*) ptr | get_hi( ptr, 0 ));
+                case 6: return (*(uint*) ptr | get_hi( ptr, 0 ) | get_hi( ptr, 1 ));
+                case 7: return (*(uint*) ptr | get_hi( ptr, 0 ) | get_hi( ptr, 1 ) | get_hi( ptr, 2 ));
+                case 8: return (*(long*) ptr);
+
+                default:
+                    ulong hash = Prime5_8;
+                    var   end  = ptr + span.Length;
+                    do
+                    {
+                        //var hc1 = hash;
+                        var hc2 = (ulong) *(long*) ptr;
+                        ptr += sizeof(long);
+
+                        hash = QueueRoundLong( hash, hash/*hc1*/ );
+                        hash = QueueRoundLong( hash, hc2 );
+
+                        hash = MixFinalLong( hash );
+                    }
+                    while ( ptr + sizeof(long) <= end );
+
+                    if ( ptr + sizeof(int) <= end )
+                    {
+                        do
+                        {
+                            //var hc1 = hash;
+                            var hc2 = (uint) *(int*) ptr;
+                            ptr += sizeof(int);
+
+                            hash = QueueRoundLong( hash, hash/*hc1*/ );
+                            hash = QueueRoundLong( hash, hc2 );
+
+                            hash = MixFinalLong( hash );
+                        }
+                        while ( ptr + sizeof(int) <= end );
+                    }
+
+                    for ( ; ptr < end; )
+                    {
+                        //var hc1 = hash;
+                        var hc2 = (uint) *ptr++;
+
+                        hash = QueueRoundLong( hash, hash/*hc1*/ );
+                        hash = QueueRoundLong( hash, hc2 );
+
+                        hash = MixFinalLong( hash );
+                    }
+
+                    return ((long) hash);
+            }
+        }
+
         [M(O.AggressiveInlining)] public static bool IsEqualByBytes< T >( in Span< T > span_1, in Span< T > span_2 )
         {
             var len = span_1.Length;
@@ -92,6 +171,8 @@ namespace System
             var s_1 = Encoding.UTF8.GetString( ptr_1, len );
             var s_2 = Encoding.UTF8.GetString( ptr_2, len );
 #endif
+            [M(O.AggressiveInlining)] static byte get_hi_byte( byte* ptr, int byteOffset ) => *(byte*) Unsafe.Add< byte >( ptr, sizeof(int) + byteOffset );
+
             switch ( len )
             {
                 case 0: return (true);
@@ -100,14 +181,14 @@ namespace System
                 case 3: return (*ptr_1++ == *ptr_2++) && (*ptr_1++ == *ptr_2++) && (*ptr_1 == *ptr_2);
                 case 4: return (*(int*) ptr_1 == *(int*) ptr_2);
 
-                case 5: return (*(int*) ptr_1 == *(int*) ptr_2) && (*(byte*) Unsafe.Add< byte >( ptr_1, sizeof(int) ) == *(byte*) Unsafe.Add< byte >( ptr_2, sizeof(int) ));
+                case 5: return (*(int*) ptr_1 == *(int*) ptr_2) && (get_hi_byte( ptr_1, 0 ) == get_hi_byte( ptr_2, 0 ));
 
-                case 6: return (*(int*) ptr_1 == *(int*) ptr_2) && (*(byte*) Unsafe.Add< byte >( ptr_1, sizeof(int)     ) == *(byte*) Unsafe.Add< byte >( ptr_2, sizeof(int)     ))
-                                                                && (*(byte*) Unsafe.Add< byte >( ptr_1, sizeof(int) + 1 ) == *(byte*) Unsafe.Add< byte >( ptr_2, sizeof(int) + 1 ));
+                case 6: return (*(int*) ptr_1 == *(int*) ptr_2) && (get_hi_byte( ptr_1, 0 ) == get_hi_byte( ptr_2, 0 ))
+                                                                && (get_hi_byte( ptr_1, 1 ) == get_hi_byte( ptr_2, 1 ));
 
-                case 7: return (*(int*) ptr_1 == *(int*) ptr_2) && (*(byte*) Unsafe.Add< byte >( ptr_1, sizeof(int)     ) == *(byte*) Unsafe.Add< byte >( ptr_2, sizeof(int)     ))
-                                                                && (*(byte*) Unsafe.Add< byte >( ptr_1, sizeof(int) + 1 ) == *(byte*) Unsafe.Add< byte >( ptr_2, sizeof(int) + 1 ))
-                                                                && (*(byte*) Unsafe.Add< byte >( ptr_1, sizeof(int) + 2 ) == *(byte*) Unsafe.Add< byte >( ptr_2, sizeof(int) + 2 ));
+                case 7: return (*(int*) ptr_1 == *(int*) ptr_2) && (get_hi_byte( ptr_1, 0 ) == get_hi_byte( ptr_2, 0 ))
+                                                                && (get_hi_byte( ptr_1, 1 ) == get_hi_byte( ptr_2, 1 ))
+                                                                && (get_hi_byte( ptr_1, 2 ) == get_hi_byte( ptr_2, 2 ));
                 case 8: return (*(long*) ptr_1 == *(long*) ptr_2);
                 default:
                     var end_1 = ptr_1 + len;
