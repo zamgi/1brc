@@ -299,7 +299,7 @@ namespace _1brc
                 var name = line_seg.Slice( 0, idx );
                 var val  = line_seg.Slice( idx + 1 );
 
-                var suc = DoubleParser.TryParse( val, out var d, out _ ); Debug.Assert( suc );
+                var suc = DoubleParser_FSM.TryParse( val, out var d, out _ ); Debug.Assert( suc );
 
                 ref var summary = ref map.GetValueRefOrAddDefault( name, createNewKeyFunc );
                 summary.Apply( d );
@@ -337,7 +337,7 @@ namespace _1brc
                 var name = line_seg.Slice( 0, idx );
                 var val  = line_seg.Slice( idx + 1 );
 
-                var suc = DoubleParser.TryParse( val, out var d, out _ ); Debug.Assert( suc );
+                var suc = DoubleParser_FSM.TryParse( val, out var d, out _ ); Debug.Assert( suc );
 
                 ref var summary = ref _Map.GetValueRefOrAddDefault( name, _CreateNewKeyFunc );
                 summary.Apply( d );
@@ -419,7 +419,8 @@ namespace _1brc
                     idx++;
                     var val = span.Slice( startIdx + idx, readByteCount - (startIdx + idx) ); //new ListSegment< byte >( _ReadBuffer, startIdx + idx, readByteCount - (startIdx + idx) );
 
-                    var suc = DoubleParser.TryParse_ByNewLine( val, out var d, out var endPos ); Debug.Assert( suc );
+                    var suc = DoubleParser_FSM.TryParse_ByNewLine( val, out var d, out var endPos ); Debug.Assert( suc );
+                    //---var suc = DoubleParser.TryParse_ByNewLine( val, out var d, out var endPos ); Debug.Assert( suc );
 
                     ref var summary = ref _Map.GetValueRefOrAddDefault( name, _CreateNewKeyFunc );
                     summary.Apply( d );
@@ -489,7 +490,9 @@ namespace _1brc
                     idx++;
                     var val = span.Slice( startIdx + idx, readByteCount - (startIdx + idx) ); //new ByteListSegment( _ReadBuffer, startIdx + idx, readByteCount - (startIdx + idx) );
 
-                    var suc = DoubleParser.TryParse_ByNewLine( val, out var d, out var endPos ); Debug.Assert( suc );
+                    var suc = DoubleParser_FSM.TryParse_ByNewLine( val, out var d, out var endPos ); Debug.Assert( suc );
+                    //---var suc = DoubleParser.TryParse_ByNewLine( val, out var d, out var endPos ); Debug.Assert( suc );
+                    //---Debug.Assert( suc_2 == suc && d == d_2 && endPos == endPos_2 );
 
                     ref var summary = ref _Map.GetValueRefOrAddDefault( name );
                     summary.Apply( d );
@@ -571,7 +574,7 @@ namespace _1brc
                         var val_i = startIdx + 1 + name_len;
                         var val   = span.Slice( val_i, readByteCount - val_i ); //new ListSegment< byte >( _ReadBuffer, val_i, readByteCount - val_i );
 
-                        var suc = DoubleParser.TryParse_ByNewLine( val, out var d, out var endPos ); Debug.Assert( suc );
+                        var suc = DoubleParser_FSM.TryParse_ByNewLine( val, out var d, out var endPos ); Debug.Assert( suc );
 
                         ref var summary = ref _Map.GetValueRefOrAddDefault( name, _CreateNewKeyFunc );
                         summary.Apply( d );
@@ -596,7 +599,7 @@ namespace _1brc
                     var val_i = startIdx + idx;
                     var val   = span.Slice( val_i, readByteCount - val_i ); //new ListSegment< byte >( _ReadBuffer, val_i, readByteCount - val_i );
 
-                    var suc = DoubleParser.TryParse_ByNewLine( val, out var d, out var endPos ); Debug.Assert( suc );
+                    var suc = DoubleParser_FSM.TryParse_ByNewLine( val, out var d, out var endPos ); Debug.Assert( suc );
 
                     ref var summary = ref _Map.GetValueRefOrAddDefault( name, _CreateNewKeyFunc );
                     summary.Apply( d );

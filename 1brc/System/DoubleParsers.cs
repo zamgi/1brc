@@ -10,7 +10,7 @@ namespace System
     /// <summary>
     /// 
     /// </summary>
-    internal static class DoubleParser
+    internal static class DoubleParser_FSM /*DFA*/
     {
         /// <summary>
         /// 
@@ -46,7 +46,7 @@ namespace System
 
         private static StateType[/*current char type*/][/*current state*/] _TransMap; /*allowed state*/
         //private static Dictionary< CharType, Dictionary< StateType, StateType > > _TransDict;
-        static DoubleParser()
+        static DoubleParser_FSM()
         {
             _TransMap = new StateType[ GetMaxInt32Value< CharType >() + 1 ][];
             for ( int size = GetMaxInt32Value< StateType >() + 1, i = 0; i < _TransMap.Length; i++ )
@@ -130,7 +130,7 @@ namespace System
                 var c  = text[ pos ];
                     ct = c.GetCharType();
 
-                var states = _TransMap[ (int) ct ];                
+                var states = _TransMap[ (int) ct ];
                 var __next_state__ = states[ (int) next_state ];
                 if ( __next_state__ == StateType.Fail )
                 {
@@ -229,6 +229,7 @@ namespace System
                     return (false);
             }
         }
+
         [M(O.AggressiveInlining)] public static bool TryParse( in ListSegment< byte > seg, out double d, out int finitaPos )
         {
             var sign    = 1;
@@ -245,7 +246,7 @@ namespace System
                 var c  = (char) span[ pos ];
                     ct = c.GetCharType();
 
-                var states = _TransMap[ (int) ct ];                
+                var states = _TransMap[ (int) ct ];
                 var __next_state__ = states[ (int) next_state ];
                 if ( __next_state__ == StateType.Fail )
                 {
@@ -279,7 +280,125 @@ namespace System
                     return (false);
             }
         }
+        [M(O.AggressiveInlining)] public static bool TryParse( in Span< byte > span, out double d, out int finitaPos )
+        {
+            var sign    = 1;
+            var integer = 0L;
+            var fract_order = 0;
+
+            var pos = 0;
+            var ct  = CharType.__UNDEFINED__;
+            
+            var count = span.Length;
+            for ( var next_state = StateType.__UNDEFINED__; pos < count; pos++ )
+            {
+                var c  = (char) span[ pos ];
+                    ct = c.GetCharType();
+
+                var states = _TransMap[ (int) ct ];
+                var __next_state__ = states[ (int) next_state ];
+                if ( __next_state__ == StateType.Fail )
+                {
+                    d = default;
+                    finitaPos = pos;
+                    return (false);
+                }
+                next_state = __next_state__;
+
+                switch ( ct )
+                {
+                    case CharType.Number:
+                        integer = integer * 10 + (c - '0');
+                        fract_order *= 10;
+                        break;
+                    case CharType.Minus: sign = -1; break;
+                    case CharType.Dot  : fract_order = 1; break;
+                }
+            }
+
+            finitaPos = pos;
+
+            switch ( ct )
+            {
+                case CharType.Number:
+                    d = sign * integer / ((0 < fract_order) ? (double) fract_order : 1);
+                    return (true);
+
+                default:
+                    d = default;
+                    return (false);
+            }
+        }
+        
         [M(O.AggressiveInlining)] public static bool TryParse_ByNewLine( in Span< byte > span, out double d, out int finitaPos )
+        {
+            var sign    = 1;
+            var integer = 0L;
+            var fract_order = 0;
+
+            var pos = 0;
+            var ct  = CharType.__UNDEFINED__;
+            
+            var end = span.Length  -1;
+            var prev_ct = CharType.__UNDEFINED__;
+            for ( var next_state = StateType.__UNDEFINED__; pos <= end; pos++ )
+            {
+                var ch = (char) span[ pos ];
+                    ct = ch.GetCharType();
+
+                var states = _TransMap[ (int) ct ];                
+                var __next_state__ = states[ (int) next_state ];
+                if ( __next_state__ == StateType.Fail )
+                {
+                    switch ( ch )
+                    {
+                        case '\r': 
+                            if ( (pos != end) && (span[ pos + 1 ] == '\n') )
+                            {
+                                pos++;
+                            }
+                            ct = prev_ct;
+                            goto EXIT;
+
+                        case '\n':
+                            ct = prev_ct;
+                            goto EXIT;
+
+                        default:
+                            d = default;
+                            finitaPos = pos;
+                            return (false);
+                    }
+                }
+                next_state = __next_state__;
+
+                switch ( ct )
+                {
+                    case CharType.Number:
+                        integer = integer * 10 + (ch - '0');
+                        fract_order *= 10;
+                        break;
+                    case CharType.Minus: sign = -1; break;
+                    case CharType.Dot  : fract_order = 1; break;
+                }
+
+                prev_ct = ct;
+            }
+        EXIT:
+            finitaPos = pos;
+
+            switch ( ct )
+            {
+                case CharType.Number:
+                    d = sign * integer / ((0 < fract_order) ? (double) fract_order : 1);
+                    return (true);
+
+                default:
+                    d = default;
+                    return (false);
+            }
+        }
+        [M(O.AggressiveInlining)] public static bool TryParse2Decimal_ByNewLine( in Span< byte > span, out decimal d, out int finitaPos )
         {
             var sign    = 1;
             var integer = 0L;
@@ -339,7 +458,8 @@ namespace System
             switch ( ct )
             {
                 case CharType.Number:
-                    d = sign * integer / ((0 < fract_order) ? (double) fract_order : 1);
+                    d = sign * integer;
+                    if ( 0 < fract_order ) d /= fract_order;
                     return (true);
 
                 default:
@@ -352,11 +472,11 @@ namespace System
     /// <summary>
     /// 
     /// </summary>
-    internal static class DoubleParser_v2
+    internal static class DoubleParser
     {
-        public static bool TryParseDouble( string s, out double d ) => TryParseDouble( Encoding.UTF8.GetBytes( s ), out d );
-        public static bool TryParseDouble( byte[] chars, out double d ) => TryParseDouble( chars, 0, chars.Length, out d );
-        public static bool TryParseDouble( byte[] chars, int offset, int count, out double d )
+        public static bool TryParse( string s, out double d ) => TryParse( Encoding.UTF8.GetBytes( s ), out d );
+        public static bool TryParse( byte[] chars, out double d ) => TryParse( chars, 0, chars.Length, out d );
+        public static bool TryParse( byte[] chars, int offset, int count, out double d )
         {
             d = 0;
             int offsetMax = offset + count;
@@ -411,8 +531,8 @@ namespace System
             return (true);
         }
 
-        public static bool TryParseDouble( IList< byte > chars, out double d ) => TryParseDouble( chars, 0, chars.Count, out d );
-        public static bool TryParseDouble( IList< byte > chars, int offset, int count, out double d )
+        public static bool TryParse( IList< byte > chars, out double d ) => TryParse( chars, 0, chars.Count, out d );
+        public static bool TryParse( IList< byte > chars, int offset, int count, out double d )
         {
             d = 0;
             int offsetMax = offset + count;
@@ -464,6 +584,149 @@ namespace System
                 return (false);
             }
             d = (negative ? -1 : 1) * value;
+            return (true);
+        }
+
+        public static bool TryParse( in Span< byte > span, out double d )
+        {
+            d = 0;
+            var count    = span.Length;
+            var negative = false;
+            var pos      = 0;
+            if ( (0 < count) && (span[ pos ] == '-') )
+            {
+                negative = true;
+                pos++;
+                count--;
+            }
+            if ( count < 1 || 10 < count )
+            {
+                return (false);
+            }
+
+            int value = 0;
+            int ch;
+            while ( pos < count )
+            {
+                ch = (span[ pos ] - '0');
+                if ( ch == ('.' - '0') )
+                {
+                    pos++;
+                    int pow10 = 1;
+                    while ( pos < count )
+                    {
+                        ch = span[ pos ] - '0';
+                        if ( ((uint) ch) >= 10 )
+                        {
+                            return (false);
+                        }
+                        pow10 *= 10;
+                        value = value * 10 + ch;
+                        pos++;
+                    }
+                    d = (negative ? -1 : 1) * (double) value / pow10;
+                    return (true);
+                }
+                else if ( ((uint) ch) >= 10 )
+                {
+                    return (false);
+                }
+                value = value * 10 + ch;
+                pos++;
+            }
+            // Ten digits w/out a decimal point might have overflowed the int
+            if ( count == 10 )
+            {
+                return (false);
+            }
+            d = (negative ? -1 : 1) * value;
+            return (true);
+        }
+        public static bool TryParse_ByNewLine( in Span< byte > span, out double d, out int finitaPos )
+        {            
+            var count    = span.Length;
+            var negative = false;
+            var pos      = 0;
+            if ( (0 < count) && (span[ pos ] == '-') )
+            {
+                negative = true;
+                pos++;
+            }
+
+            int value = 0;
+            while ( pos < count )
+            {
+                int ch = (span[ pos ] - '0');
+                if ( ch == ('.' - '0') )
+                {
+                    pos++;
+                    int pow10 = 1;
+                    while ( pos < count )
+                    {
+                        ch = span[ pos ] - '0';
+                        if ( ((uint) ch) >= 10 )
+                        {
+                            switch ( ch )
+                            {
+                                case ('\r' - '0'):
+                                    if ( (pos < (count - 1)) && (span[ pos + 1 ] == '\n') ) pos++;
+                                    goto EXIT_1;
+
+                                case ('\n' - '0'):
+                                    goto EXIT_1;
+
+                                default:
+                                    d = default;
+                                    finitaPos = pos;
+                                    return (false);
+                            }
+                        }
+                        pow10 *= 10;
+                        value  = value * 10 + ch;
+                        pos++;
+                    }
+               EXIT_1:
+                    // Ten digits w/out a decimal point might have overflowed the int
+                    //if ( 10 + (negative ? 1 : 0) <= pos )
+                    //{
+                    //    d = default;
+                    //    finitaPos = pos;
+                    //    return (false);
+                    //}
+                    d = (negative ? -1 : 1) * (double) value / pow10;
+                    finitaPos = pos;
+                    return (true);
+                }
+                else if ( ((uint) ch) >= 10 )
+                {
+                    switch ( ch )
+                    {
+                        case ('\r' - '0'):
+                            if ( (pos < (count - 1)) && (span[ pos + 1 ] == '\n') ) pos++;
+                            goto EXIT_2;
+
+                        case ('\n' - '0'):
+                            goto EXIT_2;
+
+                        default:
+                            d = default;
+                            finitaPos = pos;
+                            return (false);
+                    }
+                }
+                value = value * 10 + ch;
+                pos++;
+            }
+      EXIT_2:
+            // Ten digits w/out a decimal point might have overflowed the int
+            //if ( 10 + (negative ? 1 : 0) <= pos )
+            //{
+            //    d = default;
+            //    finitaPos = pos;
+            //    return (false);
+            //}
+            d = (negative ? -1 : 1) * value;
+            finitaPos = pos;
             return (true);
         }
     }

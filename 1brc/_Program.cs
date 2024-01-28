@@ -31,12 +31,14 @@ namespace _1brc
                 Console.WriteLine();
                 //-------------------------------------------------------//
 
+                #region [.High proc priority.]
                 using ( var p = Process.GetCurrentProcess() )
                 {
                     p.PriorityBoostEnabled = true;
                     p.PriorityClass        = ProcessPriorityClass.High/*RealTime*/;
                     p.Threads.Cast< ProcessThread >().ToList().ForEach( t => { t.PriorityBoostEnabled = true; t.PriorityLevel = ThreadPriorityLevel.Highest; } );
                 }
+                #endregion
 
                 var sw = new Stopwatch();
                 //var innerBufferCapacity = (1 << 24); //16MB
